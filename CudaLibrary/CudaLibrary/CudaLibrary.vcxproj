@@ -75,6 +75,7 @@
     </Link>
     <CudaCompile>
       <TargetMachinePlatform>64</TargetMachinePlatform>
+      <Warning>Wall</Warning>
     </CudaCompile>
   </ItemDefinitionGroup>
   <ItemGroup>

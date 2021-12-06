@@ -16,32 +16,45 @@
 typedef unsigned int uint;
 
 // simulation parameters
-struct SimParams
+struct CudaSimParams
 {
-    float3 colliderPos;
-    float  colliderRadius;
+    float3 Gravity;
+    float ParticleRadius;
 
-    float3 gravity;
-    float globalDamping;
-    float particleRadius;
+    float SupportRadius;
+    float SupportRadiusSquared;
 
-    uint3 gridSize;
-    uint numCells;
-    float3 worldOrigin;
-    float3 cellSize;
+    uint3 GridSize;
+    uint NumCells;
+    float3 WorldOrigin;
+    float3 CellSize;
 
-    uint numBodies;
-    uint maxParticlesPerCell;
+    uint NumBodies;
+    uint MaxParticlesPerCell;
 
-    float spring;
-    float damping;
-    float shear;
-    float attraction;
-    float boundaryDamping;
+    float BoundaryDamping;
 
-    float particleMass;
+    float ParticleMass;
+    float GasConstant;
+    float RestDensity;
+    float Viscosity;
+    float Threshold;
+    float ThresholdSquared;
+    float SurfaceTension;
 
-    float supportRadius;
+    float CflScale;
+
+    float Poly6;
+    float Poly6Gradient;
+    float Poly6Laplacian;
+    float SpikyGradient;
+    float ViscosityLaplacian;
+
+    float DeltaTime;
+
+    float XScaleFactor;
+    float YScaleFactor;
+    float ZScaleFactor;
 };
 
 #endif

@@ -501,7 +501,7 @@ inline bool sdkWriteFile(const char *filename, const T *data, unsigned int len,
 template <class T, class S>
 inline bool compareData(const T *reference, const T *data,
                         const unsigned int len, const S epsilon,
-                        const float threshold) {
+                        const float Threshold) {
   assert(epsilon >= 0);
 
   bool result = true;
@@ -526,7 +526,7 @@ inline bool compareData(const T *reference, const T *data,
 #endif
   }
 
-  if (threshold == 0.0f) {
+  if (Threshold == 0.0f) {
     return (result) ? true : false;
   } else {
     if (error_count) {
@@ -535,7 +535,7 @@ inline bool compareData(const T *reference, const T *data,
              error_count);
     }
 
-    return (len * threshold > error_count) ? true : false;
+    return (len * Threshold > error_count) ? true : false;
   }
 }
 
@@ -550,15 +550,15 @@ inline bool compareData(const T *reference, const T *data,
 //! @param data       handle to the computed data
 //! @param len        number of elements in reference and data
 //! @param epsilon    epsilon to use for the comparison
-//! @param epsilon    threshold % of (# of bytes) for pass/fail
+//! @param epsilon    Threshold % of (# of bytes) for pass/fail
 //////////////////////////////////////////////////////////////////////////////
 template <class T, class S>
 inline bool compareDataAsFloatThreshold(const T *reference, const T *data,
                                         const unsigned int len, const S epsilon,
-                                        const float threshold) {
+                                        const float Threshold) {
   assert(epsilon >= 0);
 
-  // If we set epsilon to be 0, let's set a minimum threshold
+  // If we set epsilon to be 0, let's set a minimum Threshold
   float max_error = MAX((float)epsilon, __MIN_EPSILON_ERROR);
   int error_count = 0;
   bool result = true;
@@ -574,7 +574,7 @@ inline bool compareDataAsFloatThreshold(const T *reference, const T *data,
     }
   }
 
-  if (threshold == 0.0f) {
+  if (Threshold == 0.0f) {
     if (error_count) {
       printf("total # of errors = %d\n", error_count);
     }
@@ -587,7 +587,7 @@ inline bool compareDataAsFloatThreshold(const T *reference, const T *data,
              error_count);
     }
 
-    return ((len * threshold > error_count) ? true : false);
+    return ((len * Threshold > error_count) ? true : false);
   }
 }
 
@@ -602,7 +602,7 @@ inline void sdkDumpBin(void *data, unsigned int bytes, const char *filename) {
 
 inline bool sdkCompareBin2BinUint(const char *src_file, const char *ref_file,
                                   unsigned int nelements, const float epsilon,
-                                  const float threshold, char *exec_path) {
+                                  const float Threshold, char *exec_path) {
   unsigned int *src_buffer, *ref_buffer;
   FILE *src_fp = NULL, *ref_fp = NULL;
 
@@ -652,14 +652,14 @@ inline bool sdkCompareBin2BinUint(const char *src_file, const char *ref_file,
       printf(
           "> compareBin2Bin <unsigned int> nelements=%d,"
           " epsilon=%4.2f, threshold=%4.2f\n",
-          nelements, epsilon, threshold);
+          nelements, epsilon, Threshold);
       printf("   src_file <%s>, size=%d bytes\n", src_file,
              static_cast<int>(fsize));
       printf("   ref_file <%s>, size=%d bytes\n", ref_file_path,
              static_cast<int>(fsize));
 
       if (!compareData<unsigned int, float>(ref_buffer, src_buffer, nelements,
-                                            epsilon, threshold)) {
+                                            epsilon, Threshold)) {
         error_count++;
       }
 
@@ -690,7 +690,7 @@ inline bool sdkCompareBin2BinUint(const char *src_file, const char *ref_file,
 
 inline bool sdkCompareBin2BinFloat(const char *src_file, const char *ref_file,
                                    unsigned int nelements, const float epsilon,
-                                   const float threshold, char *exec_path) {
+                                   const float Threshold, char *exec_path) {
   float *src_buffer = NULL, *ref_buffer = NULL;
   FILE *src_fp = NULL, *ref_fp = NULL;
   size_t fsize = 0;
@@ -734,7 +734,7 @@ inline bool sdkCompareBin2BinFloat(const char *src_file, const char *ref_file,
       printf(
           "> compareBin2Bin <float> nelements=%d, epsilon=%4.2f,"
           " threshold=%4.2f\n",
-          nelements, epsilon, threshold);
+          nelements, epsilon, Threshold);
       fsize = fread(src_buffer, sizeof(float), nelements, src_fp);
       printf("   src_file <%s>, size=%d bytes\n", src_file,
              static_cast<int>(fsize * sizeof(float)));
@@ -743,7 +743,7 @@ inline bool sdkCompareBin2BinFloat(const char *src_file, const char *ref_file,
              static_cast<int>(fsize * sizeof(float)));
 
       if (!compareDataAsFloatThreshold<float, float>(
-              ref_buffer, src_buffer, nelements, epsilon, threshold)) {
+              ref_buffer, src_buffer, nelements, epsilon, Threshold)) {
         error_count++;
       }
 
@@ -844,7 +844,7 @@ inline bool sdkLoadPPM4ub(const char *file, unsigned char **data,
 }
 
 inline bool sdkComparePPM(const char *src_file, const char *ref_file,
-                          const float epsilon, const float threshold,
+                          const float epsilon, const float Threshold,
                           bool verboseErrors) {
   unsigned char *src_data, *ref_data;
   uint64_t error_count = 0;
@@ -891,11 +891,11 @@ inline bool sdkComparePPM(const char *src_file, const char *ref_file,
   if (verboseErrors) {
     std::cerr << "PPMvsPPM: comparing images size (" << src_width << ","
               << src_height << ") epsilon(" << epsilon << "), threshold("
-              << threshold * 100 << "%)\n";
+              << Threshold * 100 << "%)\n";
   }
 
   if (compareData(ref_data, src_data, src_width * src_height * 4, epsilon,
-                  threshold) == false) {
+                  Threshold) == false) {
     error_count = 1;
   }
 
@@ -914,7 +914,7 @@ inline bool sdkComparePPM(const char *src_file, const char *ref_file,
 }
 
 inline bool sdkComparePGM(const char *src_file, const char *ref_file,
-                          const float epsilon, const float threshold,
+                          const float epsilon, const float Threshold,
                           bool verboseErrors) {
   unsigned char *src_data = 0, *ref_data = 0;
   uint64_t error_count = 0;
@@ -961,10 +961,10 @@ inline bool sdkComparePGM(const char *src_file, const char *ref_file,
   if (verboseErrors)
     std::cerr << "PGMvsPGM: comparing images size (" << src_width << ","
               << src_height << ") epsilon(" << epsilon << "), threshold("
-              << threshold * 100 << "%)\n";
+              << Threshold * 100 << "%)\n";
 
   if (compareData(ref_data, src_data, src_width * src_height, epsilon,
-                  threshold) == false) {
+                  Threshold) == false) {
     error_count = 1;
   }
 
