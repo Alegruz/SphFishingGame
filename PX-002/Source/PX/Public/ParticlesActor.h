@@ -23,18 +23,19 @@
 
 #include "ParticlesActor.generated.h"
 
-//#define NUM_PARTICLES (65536u)
+#define NUM_PARTICLES (65536u)
 //#define NUM_PARTICLES (32768u)
-#define NUM_PARTICLES (16384u)
+//#define NUM_PARTICLES (16384u)
 //#define NUM_PARTICLES (8192u)
 //#define NUM_PARTICLES (4096u)
 //#define NUM_PARTICLES (2048u)
 //#define NUM_PARTICLES (1024u)
 //#define NUM_PARTICLES (512u)
 //#define NUM_PARTICLES (128u)
+#define NUM_BOUNDARY_PARTICLES (0u)
 #define GRID_SIZE (64u)
 #define GRID_SIZE_LOG2  (6)
-#define RENDER_INSTANCES (1)
+#define RENDER_INSTANCES (0)
 
 UENUM(BlueprintType)
 enum class ESphPlatform : uint8
@@ -71,7 +72,7 @@ public:
 	bool InitializeCuda(GPU_SELECT_MODE Mode, int32 SpecifiedDeviceId);
 
 	UFUNCTION(BlueprintCallable)
-		void InitializeGrid(int32 Size, float Spacing, float Jitter, int32 InNumParticles);
+		void InitializeGrid(int32 Size, float Spacing, float Jitter, int32 InNumFluidParticles, int32 InBoundaryParticles);
 
 	UFUNCTION(BlueprintCallable)
 		void CleanUpCuda();
@@ -124,7 +125,7 @@ public:
 		float ParticleMeshRadius = 50.0f;
 
 	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly)
-		float ParticleRenderRadius = 15.0f;
+		float ParticleRenderRadius = 10.0f;
 
 	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly)
 		float ParticleRadius = 1.0f / 64.0f;
@@ -133,7 +134,10 @@ public:
 		float BoundaryDamping = -0.5f;
 
 	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly)
-		float Mass = 0.02f;
+		float FluidParticleMass = 0.02f;
+
+	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly)
+		float BoundaryParticleMass = 0.05f;
 
 	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly)
 		float SupportRadius;
@@ -185,7 +189,9 @@ public:
 		float CustomDeltaTime = 0.001f;
 
 	// data
-	uint32 NumParticles = NUM_PARTICLES;
+	uint32 NumParticles = NUM_PARTICLES + NUM_BOUNDARY_PARTICLES;
+	uint32 NumFluidParticles = NUM_PARTICLES;
+	uint32 NumBoundaryParticles = NUM_BOUNDARY_PARTICLES;
 
 	// CPU data
 	float* HostPositions;

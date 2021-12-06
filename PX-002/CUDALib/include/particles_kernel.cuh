@@ -35,6 +35,7 @@ struct CudaSimParams
     float BoundaryDamping;
 
     float ParticleMass;
+    float BoundaryParticleMass;
     float GasConstant;
     float RestDensity;
     float Viscosity;

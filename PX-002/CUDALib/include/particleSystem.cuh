@@ -50,6 +50,8 @@ extern "C"
                                           uint*  GridParticleIndice,
                                           uint*  CellStarts,
                                           uint*  CellEnds,
+                                          uint   NumBoundaryParticles,
+                                          uint   NumFluidParticles,
                                           uint   NumParticles);
 
     void CudaComputeAllForcesAndVelocities(float* OutVelocities,
