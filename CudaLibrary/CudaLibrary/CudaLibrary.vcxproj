@@ -92,7 +92,6 @@
     <ClInclude Include="helper_timer.h" />
     <ClInclude Include="particleSystem.cuh" />
     <ClInclude Include="particles_kernel.cuh" />
-    <ClInclude Include="particles_kernel_impl.cuh" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="tables.h" />
   </ItemGroup>
