@@ -25,9 +25,12 @@ struct CudaSimParams
     float SupportRadiusSquared;
 
     uint3 GridSize;
+    uint3 McGridSize;
     uint NumCells;
+    uint NumVoxels;
     float3 WorldOrigin;
     float3 CellSize;
+    float3 McCellSize;
 
     uint NumBodies;
     uint MaxParticlesPerCell;

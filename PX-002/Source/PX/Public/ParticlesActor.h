@@ -23,18 +23,19 @@
 
 #include "ParticlesActor.generated.h"
 
-#define NUM_PARTICLES (65536u)
+//#define NUM_PARTICLES (65536u)
 //#define NUM_PARTICLES (32768u)
-//#define NUM_PARTICLES (16384u)
+#define NUM_PARTICLES (16384u)
 //#define NUM_PARTICLES (8192u)
 //#define NUM_PARTICLES (4096u)
 //#define NUM_PARTICLES (2048u)
 //#define NUM_PARTICLES (1024u)
 //#define NUM_PARTICLES (512u)
 //#define NUM_PARTICLES (128u)
-#define NUM_BOUNDARY_PARTICLES (0u)
+#define NUM_BOUNDARY_PARTICLES (4096u)
+#define NUM_BOUNDARY_PARTICLES_PER_FISH (16u)
 #define GRID_SIZE (64u)
-#define GRID_SIZE_LOG2  (6)
+#define GRID_SIZE_LOG2  (7u)
 #define RENDER_INSTANCES (0)
 
 UENUM(BlueprintType)
@@ -114,6 +115,9 @@ public:
 	UFUNCTION(BlueprintCallable)
 		void CreateIsosurface();
 
+	UFUNCTION(BlueprintImplementableEvent)
+		void UpdateFishesLocation();
+
 	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly)
 		ESphPlatform SphPlatform = ESphPlatform::E_GPU_CUDA;
 
@@ -184,9 +188,14 @@ public:
 	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly)
 		FVector Gravity = FVector(0.0f, 0.0f, -9.80665f);
 
-
 	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly)
 		float CustomDeltaTime = 0.001f;
+
+	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly)
+		int32 NumFishes;
+
+	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly)
+		TArray<FVector> FishesCoordinate;
 
 	// data
 	uint32 NumParticles = NUM_PARTICLES + NUM_BOUNDARY_PARTICLES;
@@ -194,83 +203,96 @@ public:
 	uint32 NumBoundaryParticles = NUM_BOUNDARY_PARTICLES;
 
 	// CPU data
-	float* HostPositions;
-	float* HostVelocities;
-	float* HostForces;
-	float* HostPressureForces;
-	float* HostViscosityForces;
-	//float* HostSurfaceTensionForces;
-	float* HostDensities;
-	float* HostPressures;
+	float* HostPositions = nullptr;
+	float* HostVelocities = nullptr;
+	float* HostForces = nullptr;
+	float* HostPressureForces = nullptr;
+	float* HostViscosityForces = nullptr;
+	//float* HostSurfaceTensionForces = nullptr;
+	float* HostDensities = nullptr;
+	float* HostPressures = nullptr;
 
-	uint32* HostParticleHash;
-	uint32* HostCellStarts;
-	uint32* HostCellEnds;
+	uint32* HostGridParticleHashes = nullptr;
+	uint32* HostGridParticleIndice = nullptr;
+	uint32* HostCellStarts = nullptr;
+	uint32* HostCellEnds = nullptr;
 
 	// GPU data
-	float* DevicePositions;
-	float* DeviceVelocities;
-	float* DeviceForces;
-	float* DevicePressureForces;
-	float* DeviceViscosityForces;
-	//float* DeviceSurfaceTensionForces;
-	float* DeviceDensities;
-	float* DevicePressures;
+	float* DevicePositions = nullptr;
+	float* DeviceVelocities = nullptr;
+	float* DeviceForces = nullptr;
+	float* DevicePressureForces = nullptr;
+	float* DeviceViscosityForces = nullptr;
+	//float* DeviceSurfaceTensionForces = nullptr;
+	float* DeviceDensities = nullptr;
+	float* DevicePressures = nullptr;
 
-	float* DeviceSortedPositions;
-	float* DeviceSortedVelocities;
+	float* DeviceSortedPositions = nullptr;
+	float* DeviceSortedVelocities = nullptr;
 
 	// grid data for sorting method
-	uint32* DeviceGridParticleHashes;
-	uint32* DeviceGridParticleIndice;
-	uint32* DeviceCellStarts;
-	uint32* DeviceCellEnds;
+	uint32* DeviceGridParticleHashes = nullptr;
+	uint32* DeviceGridParticleIndice = nullptr;
+	uint32* DeviceCellStarts = nullptr;
+	uint32* DeviceCellEnds = nullptr;
 
 	uint32 GridSortBits;
 
-	float* CudaPositionsVbo;	// these are the CUDA deviceMem Positions
+	float* CudaPositionsVbo = nullptr;	// these are the CUDA deviceMem Positions
 
 	CudaSimParams SimulationParameters;
 	uint3 GridSize;
 	uint32 NumGridCells;
 
-	uint32 SolverIterations;
+	uint32 SolverIterations = 1u;
 
 	//UPROPERTY(BlueprintReadWrite, VisibleAnywhere)
 	//TArray<class AParticlesActor*> Particles;
 
 	// marching cubes
 	uint3 GridSizeLog2;
+	uint3 McGridSize;
 	uint3 GridSizeMask;
 	uint3 GridSizeShift;
 
 	float3 VoxelSize;
 	uint NumVoxels;
 	uint NumMaxVertice;
-	uint NumActiveVoxels;
-	uint NumTotalVertice;
+	uint NumActiveVoxels = 0u;
+	uint NumTotalVertice = 0u;
 
 	float IsoValue;
 	float DeviceIsoValue;
 
+	float4* HostMcVertices = nullptr;
+	float4* HostMcNormals = nullptr;
+
+	uint32* HostMcCellStarts = nullptr;
+	uint32* HostMcCellEnds = nullptr;
+
+	float* DeviceMcSortedPositions = nullptr;
+
+	// grid data for sorting method
+	uint32* DeviceMcGridParticleHashes = nullptr;
+	uint32* DeviceMcGridParticleIndice = nullptr;
+	uint32* DeviceMcCellStarts = nullptr;
+	uint32* DeviceMcCellEnds = nullptr;
+
 	// device data
-	float4* DeviceMcPositions;
-	float4* DeviceMcNormals;
+	float4* DeviceMcPositions = nullptr;
+	float4* DeviceMcNormals = nullptr;
 
-	float4* HostMcVertices;
-	float4* HostMcNormals;
-
-	uchar* DeviceVolumes;
-	uint32* DeviceVoxelVertices;
-	uint32* DeviceVoxelVerticesScan;
-	uint32* DeviceVoxelsOccupied;
-	uint32* DeviceVoxelsOccupiedScan;
-	uint32* DeviceCompactedVoxelArray;
+	uchar* DeviceVolumes = nullptr;
+	uint32* DeviceVoxelVertices = nullptr;
+	uint32* DeviceVoxelVerticesScan = nullptr;
+	uint32* DeviceVoxelsOccupied = nullptr;
+	uint32* DeviceVoxelsOccupiedScan = nullptr;
+	uint32* DeviceCompactedVoxelArray = nullptr;
 
 	// tables
-	uint32* DeviceNumVerticesTable;
-	uint32* DeviceEdgeTable;
-	uint32* DeviceTriTable;
+	uint32* DeviceNumVerticesTable = nullptr;
+	uint32* DeviceEdgeTable = nullptr;
+	uint32* DeviceTriTable = nullptr;
 
 	TArray<FVector> Vertices;
 	TArray<int32> Triangles;
@@ -283,6 +305,8 @@ public:
 	//UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Components")
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Components")
 		class UInstancedStaticMeshComponent* ParticleInstancedMeshComponent = nullptr;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Components")
+		class UInstancedStaticMeshComponent* BoundaryParticleInstancedMeshComponent = nullptr;
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Components")
 		UProceduralMeshComponent* ParticleProceduralMeshComponent = nullptr;
 

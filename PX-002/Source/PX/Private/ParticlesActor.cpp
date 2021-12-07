@@ -18,11 +18,24 @@ AParticlesActor::AParticlesActor()
 	, Poly6Laplacian(-(945.0f / (32.0f * PI * pow(SupportRadius, 9.0f))))
 	, SpikyGradient(-(45.0f / (PI * pow(SupportRadiusSquared, 3.0f))))
 	, ViscosityLaplacian(45.0f / (PI * pow(SupportRadiusSquared, 3.0f)))
+	, GridSortBits(18u)	// increase this for larger grids
+	, GridSize(make_uint3(GRID_SIZE, GRID_SIZE, GRID_SIZE))
+	, NumGridCells(GridSize.x * GridSize.y * GridSize.z)
+	, GridSizeLog2(make_uint3(GRID_SIZE_LOG2, GRID_SIZE_LOG2, GRID_SIZE_LOG2))
+	, McGridSize(make_uint3(1u << GridSizeLog2.x, 1u << GridSizeLog2.y, 1u << GridSizeLog2.z))
+	, GridSizeMask(make_uint3(McGridSize.x - 1, McGridSize.y - 1, McGridSize.z - 1))
+	, GridSizeShift(make_uint3(0, GridSizeLog2.x, GridSizeLog2.x + GridSizeLog2.y))
+	, VoxelSize(make_float3(2.0f / McGridSize.x, 2.0f / McGridSize.y, 2.0f / McGridSize.z))
+	, NumVoxels(McGridSize.x* McGridSize.y* McGridSize.z)
+	, NumMaxVertice(McGridSize.x* McGridSize.y * 100u)
+	, IsoValue(0.0f)
+	, DeviceIsoValue(IsoValue)
 {
 	// Set this actor to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = true;
 
 	ParticleInstancedMeshComponent = CreateDefaultSubobject<UInstancedStaticMeshComponent>("ParticleInstancedMeshComponent");
+	BoundaryParticleInstancedMeshComponent = CreateDefaultSubobject<UInstancedStaticMeshComponent>("BoundaryParticleInstancedMeshComponent");
 	ParticleProceduralMeshComponent = CreateDefaultSubobject<UProceduralMeshComponent>("ParticleProceduralMeshComponent");
 //#if RENDER_INSTANCES
 //	RootComponent = ParticleInstancedMeshComponent;
@@ -42,16 +55,12 @@ AParticlesActor::AParticlesActor()
 		//cudaInit(1u, Argv);
 	}
 
-
-	GridSize = make_uint3(GRID_SIZE, GRID_SIZE, GRID_SIZE);
-	SolverIterations = 1u;
-
-	NumGridCells = GridSize.x * GridSize.y * GridSize.z;
-	GridSortBits = 18u;	// increase this for larger grids
-
+	NumFishes = static_cast<int32>(NumBoundaryParticles / NUM_BOUNDARY_PARTICLES_PER_FISH);
 	// set simulation parameters
 	SimulationParameters.GridSize = GridSize;
+	SimulationParameters.McGridSize = GridSize;
 	SimulationParameters.NumCells = NumGridCells;
+	SimulationParameters.NumVoxels = NumVoxels;
 	SimulationParameters.NumBodies = NumParticles;
 
 	SimulationParameters.ParticleRadius = ParticleRadius;
@@ -65,8 +74,9 @@ AParticlesActor::AParticlesActor()
 	SimulationParameters.SupportRadius = SupportRadius;
 	SimulationParameters.SupportRadiusSquared = SupportRadiusSquared;
 
-	const double CellSize = SimulationParameters.SupportRadius;  // cell size equal to particle diameter
+	const float CellSize = SimulationParameters.SupportRadius;  // cell size equal to particle diameter
 	SimulationParameters.CellSize = make_float3(CellSize, CellSize, CellSize);
+	SimulationParameters.McCellSize = VoxelSize;
 
 	SimulationParameters.GasConstant = StiffnessConstant;
 	SimulationParameters.RestDensity = RestDensity;
@@ -86,59 +96,12 @@ AParticlesActor::AParticlesActor()
 	SimulationParameters.Gravity = make_float3(Gravity.X, Gravity.Z, Gravity.Y);
 	SimulationParameters.DeltaTime = CustomDeltaTime;
 
-	//SimulationParameters.XScaleFactor = GetActorScale().X;
-	//SimulationParameters.YScaleFactor = GetActorScale().Z;
-	//SimulationParameters.ZScaleFactor = GetActorScale().Y;
-	SimulationParameters.XScaleFactor = 0.5f;
-	SimulationParameters.YScaleFactor = 1.0f;
-	SimulationParameters.ZScaleFactor = 1.0f;
-
-	// Initialize CUDA buffers for Marching Cubes
-	GridSizeLog2 = make_uint3(GRID_SIZE_LOG2, GRID_SIZE_LOG2, GRID_SIZE_LOG2);
-	NumVoxels = 0;
-	NumMaxVertice = 0;
-	NumActiveVoxels = 0;
-	NumTotalVertice = 0;
-
-	//IsoValue = 0.2f;
-	//DeviceIsoValue = 0.005f;
-	IsoValue = 0.0f;
-	DeviceIsoValue = 0.0f;
-
-	HostMcVertices = nullptr;
-	HostMcNormals = nullptr;
-
-	// device data
-	DeviceMcPositions = nullptr;
-	DeviceMcNormals = nullptr;
-
-	DeviceVolumes = nullptr;
-	DeviceVoxelVertices = nullptr;
-	DeviceVoxelVerticesScan = nullptr;
-	DeviceVoxelsOccupied = nullptr;
-	DeviceVoxelsOccupiedScan = nullptr;
-	DeviceCompactedVoxelArray;
-
-	// tables
-	DeviceNumVerticesTable = nullptr;
-	DeviceEdgeTable = nullptr;
-	DeviceTriTable = nullptr;
-
-	//const int ArraySize = 5;
-	//const int A[ArraySize] = { 1, 2, 3, 4, 5 };
-	//const int B[ArraySize] = { 10, 20, 30, 40, 50 };
-	//int C[ArraySize] = { 0 };
-	//int ErrorCode = -1;
-
-	//// Add vectors in parallel
-	//cudaError_t cudaStatus = addWithCuda(C, A, B, ArraySize, &ErrorCode);
-	//if (cudaStatus != cudaSuccess)
-	//{
-	//	UE_LOG(LogTemp, Warning, TEXT("addWithCuda failed!"));
-	//	UE_LOG(LogTemp, Warning, TEXT("%d, %d"), cudaStatus, ErrorCode);
-	//	return;
-	//}
-	//UE_LOG(LogTemp, Warning, TEXT("{1, 2, 3, 4, 5} + {10, 20, 30, 40, 50} = {%d, %d, %d, %d, %d}"), C[0], C[1], C[2], C[3], C[4]);
+	SimulationParameters.XScaleFactor = GetActorScale().X;
+	SimulationParameters.YScaleFactor = GetActorScale().Z;
+	SimulationParameters.ZScaleFactor = GetActorScale().Y;
+	//SimulationParameters.XScaleFactor = 0.5f;
+	//SimulationParameters.YScaleFactor = 1.0f;
+	//SimulationParameters.ZScaleFactor = 1.0f;
 
 	UE_LOG(LogTemp, Warning, TEXT("PARAMETERS"));
 	UE_LOG(LogTemp, Warning, TEXT("PARTICLE RADIUS=%f"), SimulationParameters.ParticleRadius);
@@ -198,6 +161,8 @@ void AParticlesActor::BeginPlay()
 
 void AParticlesActor::Initialize()
 {
+	FishesCoordinate.Reserve(NumFishes);
+
 	uint32 MemorySize = sizeof(float) * 4u * NumParticles;
 
 	// allocate host storage
@@ -218,6 +183,12 @@ void AParticlesActor::Initialize()
 	//FMemory::Memzero(reinterpret_cast<void*>(HostSurfaceTensionForces), MemorySize);
 	FMemory::Memzero(reinterpret_cast<void*>(HostDensities), sizeof(float) * NumParticles);
 	FMemory::Memzero(reinterpret_cast<void*>(HostPressures), sizeof(float) * NumParticles);
+
+	HostGridParticleHashes = reinterpret_cast<uint32*>(FMemory::Malloc(sizeof(uint32) * NumParticles));
+	FMemory::Memzero(reinterpret_cast<void*>(HostGridParticleHashes), sizeof(uint32) * NumParticles);
+
+	HostGridParticleIndice = reinterpret_cast<uint32*>(FMemory::Malloc(sizeof(uint32) * NumParticles));
+	FMemory::Memzero(reinterpret_cast<void*>(HostGridParticleIndice), sizeof(uint32) * NumParticles);
 
 	HostCellStarts = reinterpret_cast<uint32*>(FMemory::Malloc(sizeof(uint32) * NumGridCells));
 	FMemory::Memzero(reinterpret_cast<void*>(HostCellStarts), sizeof(uint32) * NumGridCells);
@@ -250,18 +221,25 @@ void AParticlesActor::Initialize()
 	}
 
 #if !RENDER_INSTANCES
-	GridSizeMask = make_uint3(GridSize.x - 1, GridSize.y - 1, GridSize.z - 1);
-	GridSizeShift = make_uint3(0, GridSizeLog2.x, GridSizeLog2.x + GridSizeLog2.y);
+	UE_LOG(LogTemp, Warning, TEXT("MC GRID SIZE: %u x %u x %u = %u voxels"), McGridSize.x, McGridSize.y, McGridSize.z, NumVoxels);
+	UE_LOG(LogTemp, Warning, TEXT("MAX VERTICE: %u"), NumMaxVertice);
+	
+	HostMcCellStarts = reinterpret_cast<uint32*>(FMemory::Malloc(sizeof(uint32) * NumVoxels));
+	FMemory::Memzero(reinterpret_cast<void*>(HostMcCellStarts), sizeof(uint32) * NumVoxels);
 
-	NumVoxels = GridSize.x * GridSize.y * GridSize.z;
-	VoxelSize = make_float3(2.0f / GridSize.x, 2.0f / GridSize.y, 2.0f / GridSize.z);
-	NumMaxVertice = GridSize.x * GridSize.y * 100;
+	HostMcCellEnds = reinterpret_cast<uint32*>(FMemory::Malloc(sizeof(uint32) * NumVoxels));
+	FMemory::Memzero(reinterpret_cast<void*>(HostMcCellEnds), sizeof(uint32) * NumVoxels);
 
-	printf("Grid: %d x %d x %d = %d voxels\n", GridSize.x, GridSize.y, GridSize.z, NumVoxels);
-	printf("max verts = %d\n", NumMaxVertice);
+	cudaMalloc(reinterpret_cast<void**>(&DeviceMcSortedPositions), MemorySize);
 
-	cudaMalloc((void**)&(DeviceMcPositions), NumMaxVertice * sizeof(float) * 4);
-	cudaMalloc((void**)&(DeviceMcNormals), NumMaxVertice * sizeof(float) * 4);
+	cudaMalloc(reinterpret_cast<void**>(&DeviceMcGridParticleHashes), sizeof(uint32) * NumParticles);
+	cudaMalloc(reinterpret_cast<void**>(&DeviceMcGridParticleIndice), sizeof(uint32) * NumParticles);
+
+	cudaMalloc(reinterpret_cast<void**>(&DeviceMcCellStarts), sizeof(uint32) * NumVoxels);
+	cudaMalloc(reinterpret_cast<void**>(&DeviceMcCellEnds), sizeof(uint32) * NumVoxels);
+
+	cudaMalloc(reinterpret_cast<void**>(&DeviceMcPositions), NumMaxVertice * sizeof(float) * 4);
+	cudaMalloc(reinterpret_cast<void**>(&DeviceMcNormals), NumMaxVertice * sizeof(float) * 4);
 	cudaMallocHost(reinterpret_cast<void**>(&HostMcVertices), NumMaxVertice * sizeof(float) * 4);
 	cudaMallocHost(reinterpret_cast<void**>(&HostMcNormals), NumMaxVertice * sizeof(float) * 4);
 
@@ -280,16 +258,23 @@ void AParticlesActor::Initialize()
 	Triangles.Reserve(NumMaxVertice);
 	Uv0.Reserve(NumMaxVertice);
 #else
-	ParticleInstancedMeshComponent->PreAllocateInstancesMemory(NumParticles);
+	ParticleInstancedMeshComponent->PreAllocateInstancesMemory(NumFluidParticles);
 	UE_LOG(LogTemp, Warning, TEXT("Initialize with %u Particles"), NumParticles);
-	for (uint32 Index = 0; Index < NumParticles; ++Index)
+	for (uint32 Index = 0; Index < NumFluidParticles; ++Index)
 	{
 		FVector Location(0.0f, 0.0f, 0.0f);
 		int32 Result = ParticleInstancedMeshComponent->AddInstance(FTransform(FRotator::ZeroRotator, Location, FVector(ParticleRenderRadius / ParticleMeshRadius)));
 		UE_LOG(LogTemp, Warning, TEXT("Adding Instance... %d / %d"), ParticleInstancedMeshComponent->GetInstanceCount(), Result);
 	}
-	UE_LOG(LogTemp, Warning, TEXT("Initialize::Num Render Instances: %d"), ParticleInstancedMeshComponent->GetNumRenderInstances());
+	UE_LOG(LogTemp, Warning, TEXT("Initialize::Num Render Instances: %d, %d"), ParticleInstancedMeshComponent->GetNumRenderInstances(), BoundaryParticleInstancedMeshComponent->GetNumRenderInstances());
 #endif
+	BoundaryParticleInstancedMeshComponent->PreAllocateInstancesMemory(NumBoundaryParticles);
+	for (uint32 Index = 0; Index < NumBoundaryParticles; ++Index)
+	{
+		FVector Location(0.0f, 0.0f, 0.0f);
+		int32 Result = BoundaryParticleInstancedMeshComponent->AddInstance(FTransform(FRotator::ZeroRotator, Location, FVector(ParticleRenderRadius / ParticleMeshRadius)));
+		UE_LOG(LogTemp, Warning, TEXT("Adding Boundary Instance... %d / %d"), BoundaryParticleInstancedMeshComponent->GetInstanceCount(), Result);
+	}
 }
 
 bool AParticlesActor::InitializeCuda()
@@ -535,27 +520,45 @@ void AParticlesActor::InitializeGrid(int32 Size, float Spacing, float Jitter, in
 		}
 	}
 
-	uint32 Thickness = NumBoundaryParticles / static_cast<uint32>((1.0f / ParticleRadius) * (1.0f / (2.0f * ParticleRadius)));
+	uint32 Thickness = ((NumBoundaryParticles + (static_cast<uint32>((1.0f / ParticleRadius) * (1.0f / (2.0f * ParticleRadius))) - 1u)) / static_cast<uint32>((1.0f / ParticleRadius) * (1.0f / (2.0f * ParticleRadius))));
 
 	for (uint32 y = 0u; y < Thickness; ++y)
 	{
-		for (uint32 z = 0u; z < static_cast<uint32>((1.0f / 2.0f * ParticleRadius)); ++z)
+		for (uint32 z = 0u; z < static_cast<uint32>((1.0f / (2.0f * ParticleRadius))); ++z)
 		{
 			for (uint32 x = 0u; x < static_cast<uint32>((1.0f / ParticleRadius)); ++x)
 			{
-				uint32 Index = (z * Size * Size) + (y * Size) + x + InNumFluidParticles;
+				uint32 Index = (z * Size * Size) + (y * Size) + x;
 
-				if (Index < NumParticles && static_cast<uint32>(InNumFluidParticles) <= Index)
+				if (Index < NumBoundaryParticles)
 				{
 					HostPositions[Index * 4] = (Spacing * x) + SimulationParameters.ParticleRadius - 1.0f;
-					HostPositions[Index * 4 + 1] = (Spacing * y) + SimulationParameters.ParticleRadius - 1.0f;
-					HostPositions[Index * 4 + 2] = (Spacing * z) + SimulationParameters.ParticleRadius - 1.0f;
+					HostPositions[Index * 4 + 1] = (Spacing * z) + SimulationParameters.ParticleRadius - 1.0f;
+					HostPositions[Index * 4 + 2] = 0.25f + y * SimulationParameters.ParticleRadius;
 					HostPositions[Index * 4 + 3] = 1.0f;
 
 					HostVelocities[Index * 4] = 0.0f;
 					HostVelocities[Index * 4 + 1] = 0.0f;
 					HostVelocities[Index * 4 + 2] = 0.0f;
 					HostVelocities[Index * 4 + 3] = 0.0f;
+
+					{
+						FVector Vector(HostPositions[Index * 4] * ParticleRenderRadius / ParticleRadius,
+							HostPositions[Index * 4 + 2] * ParticleRenderRadius / ParticleRadius,
+							(HostPositions[Index * 4 + 1] + 1.0f) * ParticleRenderRadius / ParticleRadius);
+						bool Result = BoundaryParticleInstancedMeshComponent->UpdateInstanceTransform(Index,
+							FTransform(FRotator::ZeroRotator, Vector, FVector(ParticleRenderRadius / ParticleMeshRadius)),
+							true);
+						//UE_LOG(LogTemp, Warning, TEXT("%d: InitGrid(%d, %d, %d)::Position=(%f, %f, %f)"),
+						//	i,
+						//	x, y, z,
+						//	HostPositions[i * 4], HostPositions[i * 4 + 1], HostPositions[i * 4 + 2]);
+						UE_LOG(LogTemp, Warning, TEXT("%d: InitGrid(%d, %d, %d)::Position=(%f, %f, %f), %s"),
+							Index,
+							x, y, z,
+							Vector.X, Vector.Y, Vector.Z,
+							Result ? *FString("True") : *FString("False"));
+					}
 				}
 			}
 		}
@@ -564,6 +567,7 @@ void AParticlesActor::InitializeGrid(int32 Size, float Spacing, float Jitter, in
 #if RENDER_INSTANCES
 	UE_LOG(LogTemp, Warning, TEXT("InitGrid::Num Render Instances: %d, %d"), ParticleInstancedMeshComponent->GetNumRenderInstances(), ParticleInstancedMeshComponent->GetInstanceCount());
 	ParticleInstancedMeshComponent->MarkRenderStateDirty();
+	BoundaryParticleInstancedMeshComponent->MarkRenderStateDirty();
 #endif
 }
 
@@ -605,6 +609,14 @@ void AParticlesActor::Destroy()
 	if (HostPressures != nullptr)
 	{
 		FMemory::Free(HostPressures);
+	}
+	if (HostGridParticleHashes != nullptr)
+	{
+		FMemory::Free(HostGridParticleHashes);
+	}
+	if (HostGridParticleIndice != nullptr)
+	{
+		FMemory::Free(HostGridParticleIndice);
 	}
 	if (HostCellStarts != nullptr)
 	{
@@ -669,6 +681,34 @@ void AParticlesActor::Destroy()
 	if (CudaPositionsVbo != nullptr)
 	{
 		cudaFree(CudaPositionsVbo);
+	}
+	if (HostMcCellStarts != nullptr)
+	{
+		FMemory::Free(HostMcCellStarts);
+	}
+	if (HostMcCellEnds != nullptr)
+	{
+		FMemory::Free(HostMcCellEnds);
+	}
+	if (DeviceMcSortedPositions != nullptr)
+	{
+		cudaFree(DeviceMcSortedPositions);
+	}
+	if (DeviceMcGridParticleHashes != nullptr)
+	{
+		cudaFree(DeviceMcGridParticleHashes);
+	}
+	if (DeviceMcGridParticleIndice != nullptr)
+	{
+		cudaFree(DeviceMcGridParticleIndice);
+	}
+	if (DeviceMcCellStarts != nullptr)
+	{
+		cudaFree(DeviceMcCellStarts);
+	}
+	if (DeviceMcCellEnds != nullptr)
+	{
+		cudaFree(DeviceMcCellEnds);
 	}
 	if (DeviceMcPositions != nullptr)
 	{
@@ -1076,6 +1116,46 @@ void AParticlesActor::Tick(float DeltaTime)
 	SimulationParameters.DeltaTime = FMath::Min(DeltaTime * 0.1f, CustomDeltaTime);
 	UE_LOG(LogTemp, Warning, TEXT("Tick: %f ~ %f"), DeltaTime, SimulationParameters.DeltaTime);
 
+	//UpdateFishesLocation();
+
+	//for (int32 i = 0; i < FishesCoordinate.Num(); ++i)
+	//{
+	//	int32 ParticleIndex = NumFluidParticles + i * NUM_BOUNDARY_PARTICLES_PER_FISH;
+
+	//	for (int32 z = 0; z < 2; ++z)
+	//	{
+	//		for (int32 y = 0; y < 4; ++y)
+	//		{
+	//			for (int32 x = 0; x < 2; ++x)
+	//			{
+	//				int32 Index = z * 4 * 2 + y * 2 + x;
+	//				HostPositions[(ParticleIndex + Index) * 4] = (FishesCoordinate[i].X * ParticleRadius / ParticleRenderRadius) - SimulationParameters.ParticleRadius + x * SimulationParameters.ParticleRadius;
+	//				HostPositions[(ParticleIndex + Index) * 4 + 1] = (FishesCoordinate[i].Z * ParticleRadius / ParticleRenderRadius) - 2 * SimulationParameters.ParticleRadius + z * SimulationParameters.ParticleRadius;
+	//				HostPositions[(ParticleIndex + Index) * 4 + 2] = (FishesCoordinate[i].Y * ParticleRadius / ParticleRenderRadius) - SimulationParameters.ParticleRadius + y * SimulationParameters.ParticleRadius;
+	//				HostPositions[(ParticleIndex + Index) * 4 + 3] = 1.0f;
+	//				//UE_LOG(LogTemp, Warning, TEXT("[%d/%d]: %f, %f, %f"),
+	//				//	i,
+	//				//	ParticleIndex + Index,
+	//				//	HostPositions[(ParticleIndex + Index) * 4],
+	//				//	HostPositions[(ParticleIndex + Index) * 4 + 1],
+	//				//	HostPositions[(ParticleIndex + Index) * 4 + 2],
+	//				//	HostPositions[(ParticleIndex + Index) * 4 + 3]);
+	//			}
+	//		}
+	//	}
+	//}
+
+	//for (uint32 Index = NumFluidParticles; Index < NumParticles; ++Index)
+	//{
+	//	UE_LOG(LogTemp, Warning, TEXT("[%d]: %f, %f, %f"),
+	//		Index,
+	//		HostPositions[Index * 4],
+	//		HostPositions[Index * 4 + 1],
+	//		HostPositions[Index * 4 + 2],
+	//		HostPositions[Index * 4 + 3]);
+	//}
+	//cudaMemcpy(DevicePositions + NumFluidParticles, HostPositions + NumFluidParticles, sizeof(float) * 4 * NumBoundaryParticles, cudaMemcpyHostToDevice);
+
 	switch (SphPlatform)
 	{
 	case ESphPlatform::E_CPU_SINGLE_THREAD:
@@ -1092,6 +1172,13 @@ void AParticlesActor::Tick(float DeltaTime)
 		// calculate Grid hash
 		CudaCalculateHashes(DeviceGridParticleHashes, DeviceGridParticleIndice, DevicePositions, NumParticles);
 
+		//cudaMemcpy(HostGridParticleHashes, DeviceGridParticleHashes, sizeof(uint32) * NumParticles, cudaMemcpyDeviceToHost);
+		//cudaMemcpy(HostGridParticleIndice, DeviceGridParticleIndice, sizeof(uint32) * NumParticles, cudaMemcpyDeviceToHost);
+		//for (uint32 i = 0u; i < NumParticles; ++i)
+		//{
+		//	UE_LOG(LogTemp, Warning, TEXT("[%u] hash: %u, index: %u"), i, HostGridParticleHashes[i], HostGridParticleIndice[i]);
+		//}
+
 		// sort particles based on hash
 		CudaSortParticles(DeviceGridParticleHashes, DeviceGridParticleIndice, NumParticles);
 
@@ -1107,6 +1194,65 @@ void AParticlesActor::Tick(float DeltaTime)
 										DeviceVelocities,
 										NumParticles,
 										NumGridCells);
+		
+#if !RENDER_INSTANCES
+		if (GridSize.x == McGridSize.x)
+		{
+			DeviceMcGridParticleHashes = DeviceGridParticleHashes;
+			DeviceMcGridParticleIndice = DeviceGridParticleIndice;
+			DeviceMcCellStarts = DeviceCellStarts;
+			DeviceMcCellEnds = DeviceCellEnds;
+			DeviceMcSortedPositions = DeviceSortedPositions;
+		}
+		else
+		{
+			CudaMcCalculateHashes(DeviceMcGridParticleHashes, DeviceMcGridParticleIndice, DevicePositions, NumParticles);
+
+			//cudaMemcpy(HostGridParticleHashes, DeviceMcGridParticleHashes, sizeof(uint32)* NumParticles, cudaMemcpyDeviceToHost);
+			//cudaMemcpy(HostGridParticleIndice, DeviceMcGridParticleIndice, sizeof(uint32)* NumParticles, cudaMemcpyDeviceToHost);
+			//for (uint32 i = 0u; i < NumParticles; ++i)
+			//{
+			//	UE_LOG(LogTemp, Warning, TEXT("[%u] mc::hash: %u, index: %u"), i, HostGridParticleHashes[i], HostGridParticleIndice[i]);
+			//}
+
+			// sort particles based on hash
+			CudaSortParticles(DeviceMcGridParticleHashes, DeviceMcGridParticleIndice, NumParticles);
+
+			// reorder particle arrays into sorted order and
+			// find start and end of each cell
+			CudaMcReorderDataAndFindCellStart(DeviceMcCellStarts,
+											  DeviceMcCellEnds,
+											  DeviceMcSortedPositions,
+											  DeviceMcGridParticleHashes,
+											  DeviceMcGridParticleIndice,
+											  DevicePositions,
+											  NumParticles,
+											  NumVoxels);
+
+			//cudaMemcpy(HostPositions, DeviceSortedPositions, sizeof(uint32) * 4u * NumParticles, cudaMemcpyDeviceToHost);
+			//for (uint32 i = 0u; i < NumParticles; ++i)
+			//{
+			//	UE_LOG(LogTemp, Warning, TEXT("[%u] sorted position: %f, %f, %f"), i, HostPositions[4 * i], HostPositions[4 * i + 1], HostPositions[4 * i + 2]);
+			//}
+			//cudaMemcpy(HostPositions, DeviceMcSortedPositions, sizeof(uint32) * 4u * NumParticles, cudaMemcpyDeviceToHost);
+			//for (uint32 i = 0u; i < NumParticles; ++i)
+			//{
+			//	UE_LOG(LogTemp, Warning, TEXT("[%u] mc::sorted position: %f, %f, %f"), i, HostPositions[4 * i], HostPositions[4 * i + 1], HostPositions[4 * i + 2]);
+			//}
+			//cudaMemcpy(HostPositions, DevicePositions, sizeof(uint32) * 4u * NumParticles, cudaMemcpyDeviceToHost);
+			//for (uint32 i = 0u; i < NumParticles; ++i)
+			//{
+			//	UE_LOG(LogTemp, Warning, TEXT("[%u] mc::position: %f, %f, %f"), i, HostPositions[4 * i], HostPositions[4 * i + 1], HostPositions[4 * i + 2]);
+			//}
+		}
+#endif
+
+		//cudaMemcpy(HostCellStarts, DeviceCellStarts, sizeof(uint32) * NumGridCells, cudaMemcpyDeviceToHost);
+		//cudaMemcpy(HostCellEnds, DeviceCellEnds, sizeof(uint32) * NumGridCells, cudaMemcpyDeviceToHost);
+		//for (uint32 i = 0u; i < NumGridCells; ++i)
+		//{
+		//	UE_LOG(LogTemp, Warning, TEXT("[%u] start: %u, end: %u"), i, HostCellStarts[i], HostCellEnds[i]);
+		//}
 
 		//cudaMemcpy(HostPositions, DevicePositions, sizeof(float) * 4 * NumParticles, cudaMemcpyDeviceToHost);
 		//cudaMemcpy(HostVelocities, DeviceVelocities, sizeof(float) * 4 * NumParticles, cudaMemcpyDeviceToHost);
@@ -1211,10 +1357,10 @@ void AParticlesActor::Tick(float DeltaTime)
 		CudaIntegrateSystem(DevicePositions, DeviceVelocities, NumFluidParticles);
 
 #if RENDER_INSTANCES
-		cudaMemcpy(HostPositions, DevicePositions, sizeof(float) * 4u * NumParticles, cudaMemcpyDeviceToHost);
+		cudaMemcpy(HostPositions, DevicePositions, sizeof(float) * 4u * NumFluidParticles, cudaMemcpyDeviceToHost);
 
 		//UE_LOG(LogTemp, Warning, TEXT("Tick::NumParticles: %u"), NumParticles);
-		for (uint32 Index = 0; Index < NumParticles; ++Index)
+		for (uint32 Index = 0; Index < NumFluidParticles; ++Index)
 		{
 			FVector VectorLocation(HostPositions[Index * 4] * ParticleRenderRadius / ParticleRadius,
 				HostPositions[Index * 4 + 2] * ParticleRenderRadius / ParticleRadius,
@@ -1225,6 +1371,18 @@ void AParticlesActor::Tick(float DeltaTime)
 				true);
 			//UE_LOG(LogTemp, Warning, TEXT("%u: Location=(%f, %f, %f)"), i, VectorLocation.X, VectorLocation.Y, VectorLocation.Z);
 		}
+		//for (uint32 Index = NumFluidParticles; Index < NumParticles; ++Index)
+		//{
+		//	//UE_LOG(LogTemp, Warning, TEXT("[%u]: Boundary Position=(%f, %f, %f)"), Index, HostPositions[Index * 4], HostPositions[Index * 4 + 1], HostPositions[Index * 4 + 2], HostPositions[Index * 4 + 3]);
+		//	FVector VectorLocation(HostPositions[Index * 4] * ParticleRenderRadius / ParticleRadius,
+		//		HostPositions[Index * 4 + 2] * ParticleRenderRadius / ParticleRadius,
+		//		(HostPositions[Index * 4 + 1] + 1.0f) * ParticleRenderRadius / ParticleRadius);
+		//	//	//Particles[i]->SetActorLocation(VectorLocation);
+		//	BoundaryParticleInstancedMeshComponent->UpdateInstanceTransform(Index - NumFluidParticles,
+		//		FTransform(FRotator::ZeroRotator, VectorLocation, FVector(ParticleRenderRadius / ParticleMeshRadius)),
+		//		true);
+		//	//UE_LOG(LogTemp, Warning, TEXT("%u: Location=(%f, %f, %f)"), Index, VectorLocation.X, VectorLocation.Y, VectorLocation.Z);
+		//}
 #endif
 		break;
 	default:
@@ -1233,15 +1391,44 @@ void AParticlesActor::Tick(float DeltaTime)
 
 #if !RENDER_INSTANCES
 	// marching cubes algorithm
-	int Threads = 128;
-	dim3 Grid(NumVoxels / Threads, 1, 1);
+	uint32 Threads = 128u;
+	dim3 Grid(NumVoxels / Threads, 1u, 1u);
 
 	// get around maximum Grid size of 65535 in each dimension
-	if (Grid.x > 65535)
+	if (Grid.x > 65535u)
 	{
-		Grid.y = Grid.x / 32768;
-		Grid.x = 32768;
+		Grid.y = Grid.x / 32768u;
+		Grid.x = 32768u;
 	}
+
+#if SAMPLE_VOLUME
+	static uint Size = McGridSize.x * McGridSize.y * McGridSize.z * sizeof(uchar);
+	if (DeviceVolumes == nullptr)
+	{
+		cudaMalloc(reinterpret_cast<void**>(&DeviceVolumes), Size);
+	}
+
+	CudaCreateVolumeFromMassAndDensities(Grid,
+		Threads,
+		DeviceVolumes,
+		McGridSize,
+		GridSizeShift,
+		GridSizeMask,
+		VoxelSize,
+		NumFluidParticles,
+		reinterpret_cast<float4*>(DeviceMcSortedPositions),
+		DeviceMcGridParticleIndice,
+		DeviceMcCellStarts,
+		DeviceMcCellEnds);
+	CudaCreateVolumeTexture(DeviceVolumes, Size);
+	uchar* HostVolumes = reinterpret_cast<uchar*>(FMemory::Malloc(Size));
+	cudaMemcpy(HostVolumes, DeviceVolumes, Size, cudaMemcpyDeviceToHost);
+
+	//for (uint32 i = 0u; i < Size; ++i)
+	//{
+	//	UE_LOG(LogTemp, Warning, TEXT("[%u]: volume: %u"), i, HostVolumes[i]);
+	//}
+#endif
 
 	// calculate number of vertices need per voxel
 	CudaLaunchClassifyVoxels(Grid, 
@@ -1249,15 +1436,15 @@ void AParticlesActor::Tick(float DeltaTime)
 							 DeviceVoxelVertices, 
 							 DeviceVoxelsOccupied, 
 							 DeviceVolumes,
-							 GridSize, 
+							 McGridSize, 
 							 GridSizeShift, 
 							 GridSizeMask,
 							 NumVoxels, 
 							 VoxelSize, 
 							 IsoValue, 
-							 DeviceSortedPositions, 
-							 DeviceCellStarts, 
-							 DeviceCellEnds);
+							 DeviceMcSortedPositions, 
+							 DeviceMcCellStarts, 
+							 DeviceMcCellEnds);
 
 #if DEBUG_BUFFERS
 	printf("voxelVerts:\n");
@@ -1346,6 +1533,8 @@ void AParticlesActor::Tick(float DeltaTime)
 		Grid2.x /= 2;
 		Grid2.y *= 2;
 	}
+	UE_LOG(LogTemp, Warning, TEXT("grid size: %u, %u, %u"), GridSize.x, GridSize.y, GridSize.z);
+	UE_LOG(LogTemp, Warning, TEXT("mc grid size: %u, %u, %u"), McGridSize.x, McGridSize.y, McGridSize.z);
 
 #if SAMPLE_VOLUME
 	CudaLaunchGenerateTriangles2(Grid2,
@@ -1355,13 +1544,16 @@ void AParticlesActor::Tick(float DeltaTime)
 								 DeviceCompactedVoxelArray,
 								 DeviceVoxelVerticesScan, 
 								 DeviceVolumes,
-								 GridSize,
+								 McGridSize,
 								 GridSizeShift, 
 								 GridSizeMask,
 								 VoxelSize, 
 								 IsoValue, 
 								 NumActiveVoxels,
-								 NumMaxVertice);
+								 NumMaxVertice,
+								 reinterpret_cast<float4*>(DeviceMcSortedPositions), 
+								 DeviceMcCellStarts, 
+								 DeviceMcCellEnds);
 #else
 	CudaLaunchGenerateTriangles(Grid2, 
 								NTHREADS, 
@@ -1369,21 +1561,22 @@ void AParticlesActor::Tick(float DeltaTime)
 								DeviceMcNormals,
 								DeviceCompactedVoxelArray,
 								DeviceVoxelVerticesScan,
-								GridSize, 
+								McGridSize, 
 								GridSizeShift, 
 								GridSizeMask,
 								VoxelSize, 
 								IsoValue, 
 								NumActiveVoxels,
 								NumMaxVertice, 
-								DeviceSortedPositions, 
-								DeviceCellStarts, 
-								DeviceCellEnds);
+								DeviceMcSortedPositions, 
+								DeviceMcCellStarts, 
+								DeviceMcCellEnds);
 #endif
 #endif
 
 #if RENDER_INSTANCES
 	ParticleInstancedMeshComponent->MarkRenderStateDirty();
+	//BoundaryParticleInstancedMeshComponent->MarkRenderStateDirty();
 #else
 	CreateIsosurface();
 #endif

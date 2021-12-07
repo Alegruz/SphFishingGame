@@ -142,6 +142,15 @@ __device__ int3 CudaCalculateGridPosition(float3 Position)
     return GridPosition;
 }
 
+__device__ int3 CudaMcCalculateGridPosition(float3 Position)
+{
+    int3 GridPosition;
+    GridPosition.x = (int)floorf((Position.x - gParameters.WorldOrigin.x) / gParameters.McCellSize.x);
+    GridPosition.y = (int)floorf((Position.y - gParameters.WorldOrigin.y) / gParameters.McCellSize.y);
+    GridPosition.z = (int)floorf((Position.z - gParameters.WorldOrigin.z) / gParameters.McCellSize.z);
+    return GridPosition;
+}
+
 // calculate address in grid from position (clamping to edges)
 __device__ uint CudaCalculateGridHash(int3 GridPosition)
 {
@@ -149,6 +158,14 @@ __device__ uint CudaCalculateGridHash(int3 GridPosition)
     GridPosition.y = GridPosition.y & (gParameters.GridSize.y - 1);
     GridPosition.z = GridPosition.z & (gParameters.GridSize.z - 1);
     return (uint) ((GridPosition.z * gParameters.GridSize.y) * gParameters.GridSize.x) + (GridPosition.y * gParameters.GridSize.x) + GridPosition.x;
+}
+
+__device__ uint CudaMcCalculateGridHash(int3 GridPosition)
+{
+    GridPosition.x = GridPosition.x & (gParameters.McGridSize.x - 1);  // wrap grid, assumes size is power of 2
+    GridPosition.y = GridPosition.y & (gParameters.McGridSize.y - 1);
+    GridPosition.z = GridPosition.z & (gParameters.McGridSize.z - 1);
+    return (uint)((GridPosition.z * gParameters.McGridSize.y) * gParameters.McGridSize.x) + (GridPosition.y * gParameters.McGridSize.x) + GridPosition.x;
 }
 
 // calculate grid hash value for each particle
@@ -170,6 +187,30 @@ void CudaCalculateHashDevice(uint*   OutGridParticleHashes, // output
     // get address in grid
     int3 GridPosition = CudaCalculateGridPosition(make_float3(Position.x, Position.y, Position.z));
     uint Hash = CudaCalculateGridHash(GridPosition);
+
+    // store grid hash and particle index
+    OutGridParticleHashes[Index] = Hash;
+    OutGridParticleIndice[Index] = Index;
+}
+
+__global__
+void CudaMcCalculateHashDevice(uint*   OutGridParticleHashes, // output
+                               uint*   OutGridParticleIndice, // output
+                               float4* InPosition,              // input: positions
+                               uint    NumParticles)
+{
+    uint Index = (blockIdx.x * blockDim.x) + threadIdx.x;
+
+    if (Index >= NumParticles)
+    {
+        return;
+    }
+
+    volatile float4 Position = InPosition[Index];
+
+    // get address in grid
+    int3 GridPosition = CudaMcCalculateGridPosition(make_float3(Position.x, Position.y, Position.z));
+    uint Hash = CudaMcCalculateGridHash(GridPosition);
 
     // store grid hash and particle index
     OutGridParticleHashes[Index] = Hash;
@@ -245,6 +286,72 @@ void CudaReorderDataAndFindCellStartDevice(uint* OutCellStarts,         // outpu
 
         OutSortedPositions[Index] = Position;
         OutSortedVelocities[Index] = Velocity;
+    }
+}
+
+__global__
+void CudaMcReorderDataAndFindCellStartDevice(uint* OutCellStarts,         // output: cell start index
+                                             uint* OutCellEnds,           // output: cell end index
+                                             float4* OutSortedPositions,  // output: sorted positions
+                                             uint* GridParticleHashes,    // input: sorted grid hashes
+                                             uint* GridParticleIndice,    // input: sorted particle indices
+                                             float4* Positions,           // input: sorted position array
+                                             uint    NumParticles)
+{
+    // Handle to thread block group
+    cg::thread_block Cta = cg::this_thread_block();
+    extern __shared__ uint SharedHash[];    // blockSize + 1 elements
+    uint Index = (blockIdx.x * blockDim.x) + threadIdx.x;
+
+    uint Hash;
+
+    // handle case when no. of particles not multiple of block size
+    if (Index < NumParticles)
+    {
+        Hash = GridParticleHashes[Index];
+
+        // Load hash data into shared memory so that we can look
+        // at neighboring particle's hash value without loading
+        // two hash values per thread
+        SharedHash[threadIdx.x + 1] = Hash;
+
+        if (Index > 0 && threadIdx.x == 0)
+        {
+            // first thread in block must load neighbor particle hash
+            SharedHash[0] = GridParticleHashes[Index - 1];
+        }
+    }
+
+    cg::sync(Cta);
+
+    if (Index < NumParticles)
+    {
+        // If this particle has a different cell index to the previous
+        // particle then it must be the first particle in the cell,
+        // so store the index of this particle in the cell.
+        // As it isn'Alpha the first particle, it must also be the cell end of
+        // the previous particle's cell
+
+        if (Index == 0 || Hash != SharedHash[threadIdx.x])
+        {
+            OutCellStarts[Hash] = Index;
+
+            if (Index > 0)
+            {
+                OutCellEnds[SharedHash[threadIdx.x]] = Index;
+            }
+        }
+
+        if (Index == NumParticles - 1)
+        {
+            OutCellEnds[Hash] = Index + 1;
+        }
+
+        // Now use the sorted index to reorder the pos and vel data
+        uint SortedIndex = GridParticleIndice[Index];
+        float4 Position = Positions[SortedIndex];
+
+        OutSortedPositions[Index] = Position;
     }
 }
 
@@ -363,7 +470,7 @@ void CudaComputeDensitiesAndPressuresDevice(float*  OutDensities,           // o
     float3 Position = make_float3(SortedPositions[Index]);
 
     // get address in grid
-    int3 GridPos = CudaCalculateGridPosition(Position);
+    int3 GridPosition = CudaCalculateGridPosition(Position);
 
     // examine neighbouring cells
     float Density = 0.f;
@@ -374,7 +481,7 @@ void CudaComputeDensitiesAndPressuresDevice(float*  OutDensities,           // o
         {
             for (int x = -1; x <= 1; x++)
             {
-                int3 NeighborPosition = GridPos + make_int3(x, y, z);
+                int3 NeighborPosition = GridPosition + make_int3(x, y, z);
                 Density += CudaComputeDensitiesByCell(NeighborPosition, Index, Position, SortedPositions, CellStarts, CellEnds, NumFluidParticles);
             }
         }
@@ -757,16 +864,17 @@ void CudaClassifyVoxels(uint*               OutVoxelVertice,
     Position.y = -1.0f + (GridPosition.y * VoxelSize.y);
     Position.z = -1.0f + (GridPosition.z * VoxelSize.z);
 
-    //float Field[8];
-    //Field[0] = CudaParticleFieldFunction(Position);
-    //Field[1] = CudaParticleFieldFunction(Position + make_float3(VoxelSize.x, 0, 0));
-    //Field[2] = CudaParticleFieldFunction(Position + make_float3(VoxelSize.x, VoxelSize.y, 0));
-    //Field[3] = CudaParticleFieldFunction(Position + make_float3(0, VoxelSize.y, 0));
-    //Field[4] = CudaParticleFieldFunction(Position + make_float3(0, 0, VoxelSize.z));
-    //Field[5] = CudaParticleFieldFunction(Position + make_float3(VoxelSize.x, 0, VoxelSize.z));
-    //Field[6] = CudaParticleFieldFunction(Position + make_float3(VoxelSize.x, VoxelSize.y, VoxelSize.z));
-    //Field[7] = CudaParticleFieldFunction(Position + make_float3(0, VoxelSize.y, VoxelSize.z));
-
+#if SAMPLE_VOLUME
+    float Field[8];
+    Field[0] = CudaSampleVolume(VolumeTex, Volumes, GridPosition, GridSize);
+    Field[1] = CudaSampleVolume(VolumeTex, Volumes, GridPosition + make_uint3(1, 0, 0), GridSize);
+    Field[2] = CudaSampleVolume(VolumeTex, Volumes, GridPosition + make_uint3(1, 1, 0), GridSize);
+    Field[3] = CudaSampleVolume(VolumeTex, Volumes, GridPosition + make_uint3(0, 1, 0), GridSize);
+    Field[4] = CudaSampleVolume(VolumeTex, Volumes, GridPosition + make_uint3(0, 0, 1), GridSize);
+    Field[5] = CudaSampleVolume(VolumeTex, Volumes, GridPosition + make_uint3(1, 0, 1), GridSize);
+    Field[6] = CudaSampleVolume(VolumeTex, Volumes, GridPosition + make_uint3(1, 1, 1), GridSize);
+    Field[7] = CudaSampleVolume(VolumeTex, Volumes, GridPosition + make_uint3(0, 1, 1), GridSize);
+#else
     float Field[8] = { 3.0f * gParameters.ParticleRadius,
                        3.0f * gParameters.ParticleRadius,
                        3.0f * gParameters.ParticleRadius,
@@ -795,6 +903,7 @@ void CudaClassifyVoxels(uint*               OutVoxelVertice,
             }
         }
     }
+#endif
 
     // calculate flag indicating if each Vertex is inside or outside isosurface
     uint CubeIndex;
@@ -1245,6 +1354,18 @@ void CudaGenerateTriangles2(float4* OutPositions,
     Vertice[6] = Position + make_float3(VoxelSize.x, VoxelSize.y, VoxelSize.z);
     Vertice[7] = Position + make_float3(0, VoxelSize.y, VoxelSize.z);
 
+
+#if SAMPLE_VOLUME
+    float Field[8];
+    Field[0] = CudaSampleVolume(VolumeTex, Volumes, GridPosition, GridSize);
+    Field[1] = CudaSampleVolume(VolumeTex, Volumes, GridPosition + make_uint3(1, 0, 0), GridSize);
+    Field[2] = CudaSampleVolume(VolumeTex, Volumes, GridPosition + make_uint3(1, 1, 0), GridSize);
+    Field[3] = CudaSampleVolume(VolumeTex, Volumes, GridPosition + make_uint3(0, 1, 0), GridSize);
+    Field[4] = CudaSampleVolume(VolumeTex, Volumes, GridPosition + make_uint3(0, 0, 1), GridSize);
+    Field[5] = CudaSampleVolume(VolumeTex, Volumes, GridPosition + make_uint3(1, 0, 1), GridSize);
+    Field[6] = CudaSampleVolume(VolumeTex, Volumes, GridPosition + make_uint3(1, 1, 1), GridSize);
+    Field[7] = CudaSampleVolume(VolumeTex, Volumes, GridPosition + make_uint3(0, 1, 1), GridSize);
+#else
     // evaluate Field values
     float Field[8] = { 3.0f * gParameters.ParticleRadius,
                         3.0f * gParameters.ParticleRadius,
@@ -1274,6 +1395,7 @@ void CudaGenerateTriangles2(float4* OutPositions,
             }
         }
     }
+#endif
 
     // recalculate flag
     uint CudeIndex;
@@ -1371,6 +1493,88 @@ void CudaGenerateTriangles2(float4* OutPositions,
         }
     }
 }
+
+__device__
+float CudaMcComputeDensities(int3 GridPosition,
+                             float3 Position,
+                             float4* SortedPositions,
+                             uint NumFluidParticles,
+                             uint* CellStarts,
+                             uint* CellEnds)
+{
+    uint GridHash = CudaMcCalculateGridHash(GridPosition);
+
+    uint StartIndex = CellStarts[GridHash];
+
+    float Density = 0.0f;
+    if (StartIndex != 0xffffffff)
+    {
+        uint EndIndex = CellEnds[GridHash];
+
+        for (uint NeighborIdx = StartIndex; NeighborIdx < EndIndex; ++NeighborIdx)
+        {
+            float3 Rij = Position - make_float3(SortedPositions[NeighborIdx]);
+            float R2 = lengthSquared(Rij);
+
+            if (R2 < gParameters.SupportRadiusSquared)
+            {
+                if (NeighborIdx < NumFluidParticles)
+                {
+                    Density += gParameters.ParticleMass * CudaKernelPoly6ByDistanceSquared(R2);
+                }
+                else
+                {
+                    Density += gParameters.BoundaryParticleMass * CudaKernelPoly6ByDistanceSquared(R2);
+                }
+            }
+        }
+    }
+    return Density;
+}
+
+__global__
+void CudaCreateVolumeFromMassAndDensitiesDevice(uchar* OutVolumes,
+                                                uint3 GridSize,
+                                                uint3 GridSizeShift,
+                                                uint3 GridSizeMask,
+                                                float3 VoxelSize,
+                                                uint NumFluidParticles, 
+                                                float4* SortedPositions,
+                                                uint* GridParticleIndice,
+                                                uint* CellStarts,
+                                                uint* CellEnds)
+{
+    uint BlockIdx = (blockIdx.y * gridDim.x) + blockIdx.x;
+    uint Index = (BlockIdx * blockDim.x) + threadIdx.x;
+
+    uint3 GridPosition = CudaCalculateGridPosition(Index, GridSizeShift, GridSizeMask);
+
+    float3 Position;
+    Position.x = -1.0f + (GridPosition.x * VoxelSize.x);
+    Position.y = -1.0f + (GridPosition.y * VoxelSize.y);
+    Position.z = -1.0f + (GridPosition.z * VoxelSize.z);
+
+    float Density = 0.0f;
+    for (int z = -1; z <= 1; ++z)
+    {
+        for (int y = -1; y <= 1; ++y)
+        {
+            for (int x = -1; x <= 1; ++x)
+            {
+                int3 NeighborPosition = make_int3(GridPosition) + make_int3(x, y, z);
+
+                Density += CudaMcComputeDensities(NeighborPosition,
+                                                  Position,
+                                                  SortedPositions,
+                                                  NumFluidParticles,
+                                                  CellStarts,
+                                                  CellEnds);
+            }
+        }
+    }
+
+    OutVolumes[Index] = gParameters.ParticleMass / Density;
+}
 #pragma endregion
 
 int main()
@@ -1467,6 +1671,25 @@ extern "C"
         getLastCudaError("Kernel execution failed");
     }
 
+    void CudaMcCalculateHashes(uint*  OutGridParticleHashes,
+                               uint*  OutGridParticleIndice,
+                               float* Positions,
+                               uint   NumParticles)
+    {
+        uint NumThreads;
+        uint NumBlocks;
+        CudaComputeGridSize(NumParticles, 256u, NumBlocks, NumThreads);
+
+        // execute the kernel
+        CudaMcCalculateHashDevice<<<NumBlocks, NumThreads>>>(OutGridParticleHashes,
+                                                             OutGridParticleIndice,
+                                                             (float4*) Positions,
+                                                             NumParticles);
+
+        // check if kernel invocation generated an error
+        getLastCudaError("Kernel execution failed");
+    }
+
     void CudaReorderDataAndFindCellStart(uint* OutCellStarts,
                                          uint* OutCellEnds,
                                          float* OutSortedPositions,
@@ -1495,6 +1718,34 @@ extern "C"
                                                                                     (float4*) Positions,
                                                                                     (float4*) Velocities,
                                                                                     NumParticles);
+        getLastCudaError("Kernel execution failed: CudaReorderDataAndFindCellStartDevice");
+
+    }
+
+    void CudaMcReorderDataAndFindCellStart(uint* OutCellStarts,
+                                           uint* OutCellEnds,
+                                           float* OutSortedPositions,
+                                           uint* GridParticleHashes,
+                                           uint* GridParticleIndice,
+                                           float* Positions,
+                                           uint   NumParticles,
+                                           uint   NumVoxels)
+    {
+        uint NumThreads;
+        uint NumBlocks;
+        CudaComputeGridSize(NumParticles, 256u, NumBlocks, NumThreads);
+
+        // set all cells to empty
+        checkCudaErrors(cudaMemset(OutCellStarts, 0xffffffff, NumVoxels * sizeof(uint)));
+
+        uint SmemSize = sizeof(uint) * (NumThreads + 1);
+        CudaMcReorderDataAndFindCellStartDevice<<<NumBlocks, NumThreads, SmemSize>>> (OutCellStarts,
+                                                                                      OutCellEnds,
+                                                                                      (float4*) OutSortedPositions,
+                                                                                      GridParticleHashes,
+                                                                                      GridParticleIndice,
+                                                                                      (float4*) Positions,
+                                                                                      NumParticles);
         getLastCudaError("Kernel execution failed: CudaReorderDataAndFindCellStartDevice");
 
     }
@@ -1807,6 +2058,31 @@ extern "C"
         thrust::exclusive_scan(thrust::device_ptr<unsigned int>(Inputs),
             thrust::device_ptr<unsigned int>(Inputs + NumElements),
             thrust::device_ptr<unsigned int>(Outputs));
+    }
+
+    void CudaCreateVolumeFromMassAndDensities(dim3 Grid, 
+                                              dim3 Threads, 
+                                              uchar* OutVolumes, 
+                                              uint3 GridSize, 
+                                              uint3 GridSizeShift, 
+                                              uint3 GridSizeMask, 
+                                              float3 VoxelSize, 
+                                              uint NumFluidParticles,
+                                              float4* SortedPositions,
+                                              uint* GridParticleIndice,
+                                              uint* CellStarts,
+                                              uint* CellEnds)
+    {
+        CudaCreateVolumeFromMassAndDensitiesDevice<<<Grid, Threads>>>(OutVolumes,
+                                                                      GridSize,
+                                                                      GridSizeShift,
+                                                                      GridSizeMask,
+                                                                      VoxelSize,
+                                                                      NumFluidParticles,
+                                                                      SortedPositions,
+                                                                      GridParticleIndice,
+                                                                      CellStarts,
+                                                                      CellEnds);
     }
 }   // extern "C"
 #pragma endregion
