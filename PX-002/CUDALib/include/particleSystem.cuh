@@ -79,6 +79,7 @@ extern "C"
                                            uint*  GridParticleIndice,    // input: sorted particle indices
                                            uint*  CellStarts,
                                            uint*  CellEnds,
+                                           uint   NumFluidParticles,
                                            uint   NumParticles);
 
     void CudaComputeForcesAndVelocities(float* OutVelocities,

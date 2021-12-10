@@ -532,20 +532,20 @@ void AParticlesActor::InitializeGrid(int32 Size, float Spacing, float Jitter, in
 
 				if (Index < NumBoundaryParticles)
 				{
-					HostPositions[Index * 4] = (Spacing * x) + SimulationParameters.ParticleRadius - 1.0f;
-					HostPositions[Index * 4 + 1] = (Spacing * z) + SimulationParameters.ParticleRadius - 1.0f;
-					HostPositions[Index * 4 + 2] = 0.25f + y * SimulationParameters.ParticleRadius;
-					HostPositions[Index * 4 + 3] = 1.0f;
+					HostPositions[(NumFluidParticles + Index) * 4] = (SimulationParameters.ParticleRadius * x) + SimulationParameters.ParticleRadius - 1.0f;
+					HostPositions[(NumFluidParticles + Index) * 4 + 1] = (SimulationParameters.ParticleRadius * z) + SimulationParameters.ParticleRadius - 1.0f;
+					HostPositions[(NumFluidParticles + Index) * 4 + 2] = 0.25f + y * SimulationParameters.ParticleRadius;
+					HostPositions[(NumFluidParticles + Index) * 4 + 3] = 1.0f;
 
-					HostVelocities[Index * 4] = 0.0f;
-					HostVelocities[Index * 4 + 1] = 0.0f;
-					HostVelocities[Index * 4 + 2] = 0.0f;
-					HostVelocities[Index * 4 + 3] = 0.0f;
+					HostVelocities[(NumFluidParticles + Index) * 4] = 0.0f;
+					HostVelocities[(NumFluidParticles + Index) * 4 + 1] = 0.0f;
+					HostVelocities[(NumFluidParticles + Index) * 4 + 2] = 0.0f;
+					HostVelocities[(NumFluidParticles + Index) * 4 + 3] = 0.0f;
 
 					{
-						FVector Vector(HostPositions[Index * 4] * ParticleRenderRadius / ParticleRadius,
-							HostPositions[Index * 4 + 2] * ParticleRenderRadius / ParticleRadius,
-							(HostPositions[Index * 4 + 1] + 1.0f) * ParticleRenderRadius / ParticleRadius);
+						FVector Vector(HostPositions[(NumFluidParticles + Index) * 4] * ParticleRenderRadius / ParticleRadius,
+							HostPositions[(NumFluidParticles + Index) * 4 + 2] * ParticleRenderRadius / ParticleRadius,
+							(HostPositions[(NumFluidParticles + Index) * 4 + 1] + 1.0f) * ParticleRenderRadius / ParticleRadius);
 						bool Result = BoundaryParticleInstancedMeshComponent->UpdateInstanceTransform(Index,
 							FTransform(FRotator::ZeroRotator, Vector, FVector(ParticleRenderRadius / ParticleMeshRadius)),
 							true);
@@ -554,7 +554,7 @@ void AParticlesActor::InitializeGrid(int32 Size, float Spacing, float Jitter, in
 						//	x, y, z,
 						//	HostPositions[i * 4], HostPositions[i * 4 + 1], HostPositions[i * 4 + 2]);
 						UE_LOG(LogTemp, Warning, TEXT("%d: InitGrid(%d, %d, %d)::Position=(%f, %f, %f), %s"),
-							Index,
+							NumFluidParticles + Index,
 							x, y, z,
 							Vector.X, Vector.Y, Vector.Z,
 							Result ? *FString("True") : *FString("False"));
@@ -1298,6 +1298,7 @@ void AParticlesActor::Tick(float DeltaTime)
    										  DeviceGridParticleIndice,
 										  DeviceCellStarts,
 										  DeviceCellEnds,
+									      NumFluidParticles,
 										  NumParticles);
 		//CudaComputeForcesAndVelocities(DeviceVelocities,
 		//							   DeviceForces,
@@ -1369,7 +1370,7 @@ void AParticlesActor::Tick(float DeltaTime)
 			ParticleInstancedMeshComponent->UpdateInstanceTransform(Index,
 				FTransform(FRotator::ZeroRotator, VectorLocation, FVector(ParticleRenderRadius / ParticleMeshRadius)),
 				true);
-			//UE_LOG(LogTemp, Warning, TEXT("%u: Location=(%f, %f, %f)"), i, VectorLocation.X, VectorLocation.Y, VectorLocation.Z);
+			//UE_LOG(LogTemp, Warning, TEXT("%u: Location=(%f, %f, %f)"), Index, VectorLocation.X, VectorLocation.Y, VectorLocation.Z);
 		}
 		//for (uint32 Index = NumFluidParticles; Index < NumParticles; ++Index)
 		//{
@@ -1377,11 +1378,11 @@ void AParticlesActor::Tick(float DeltaTime)
 		//	FVector VectorLocation(HostPositions[Index * 4] * ParticleRenderRadius / ParticleRadius,
 		//		HostPositions[Index * 4 + 2] * ParticleRenderRadius / ParticleRadius,
 		//		(HostPositions[Index * 4 + 1] + 1.0f) * ParticleRenderRadius / ParticleRadius);
-		//	//	//Particles[i]->SetActorLocation(VectorLocation);
-		//	BoundaryParticleInstancedMeshComponent->UpdateInstanceTransform(Index - NumFluidParticles,
-		//		FTransform(FRotator::ZeroRotator, VectorLocation, FVector(ParticleRenderRadius / ParticleMeshRadius)),
-		//		true);
-		//	//UE_LOG(LogTemp, Warning, TEXT("%u: Location=(%f, %f, %f)"), Index, VectorLocation.X, VectorLocation.Y, VectorLocation.Z);
+		//	////	//Particles[i]->SetActorLocation(VectorLocation);
+		//	//BoundaryParticleInstancedMeshComponent->UpdateInstanceTransform(Index - NumFluidParticles,
+		//	//	FTransform(FRotator::ZeroRotator, VectorLocation, FVector(ParticleRenderRadius / ParticleMeshRadius)),
+		//	//	true);
+		//	//UE_LOG(LogTemp, Warning, TEXT("%u: Boundary Location=(%f, %f, %f)"), Index, VectorLocation.X, VectorLocation.Y, VectorLocation.Z);
 		//}
 #endif
 		break;

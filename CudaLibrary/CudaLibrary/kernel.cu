@@ -414,6 +414,7 @@ float CudaComputeDensitiesByCell(int3    GridPosition,
                                  float4* SortedPositions,
                                  uint*   CellStarts,
                                  uint*   CellEnds,
+                                 uint*   GridParticleIndice,
                                  uint    NumFluidParticles) //Check Particle in Grad
 {
     uint GridHash = CudaCalculateGridHash(GridPosition);
@@ -431,10 +432,11 @@ float CudaComputeDensitiesByCell(int3    GridPosition,
         {
             float3 Rij = Position - make_float3(SortedPositions[NeighborIdx]);
             float R2 = lengthSquared(Rij);
+            uint OriginalIndex = GridParticleIndice[NeighborIdx];
 
             if (R2 < gParameters.SupportRadiusSquared)
             {
-                if (NeighborIdx < NumFluidParticles)
+                if (OriginalIndex < NumFluidParticles)
                 {
                     Density += gParameters.ParticleMass * CudaKernelPoly6ByDistanceSquared(R2);
                 }
@@ -482,7 +484,7 @@ void CudaComputeDensitiesAndPressuresDevice(float*  OutDensities,           // o
             for (int x = -1; x <= 1; x++)
             {
                 int3 NeighborPosition = GridPosition + make_int3(x, y, z);
-                Density += CudaComputeDensitiesByCell(NeighborPosition, Index, Position, SortedPositions, CellStarts, CellEnds, NumFluidParticles);
+                Density += CudaComputeDensitiesByCell(NeighborPosition, Index, Position, SortedPositions, CellStarts, CellEnds, GridParticleIndice, NumFluidParticles);
             }
         }
     }
@@ -553,7 +555,8 @@ void CudaComputeForcesByCell(int3    GridPosition,
                              float*  Pressures,
                              uint*   GridParticleIndice,    // input: sorted particle indices
                              uint*   CellStarts,
-                             uint*   CellEnds) //Check Particle in Grad
+                             uint*   CellEnds,
+                             uint    NumFluidParticles) //Check Particle in Grad
 {
     uint GridHash = CudaCalculateGridHash(GridPosition);
 
@@ -576,8 +579,22 @@ void CudaComputeForcesByCell(int3    GridPosition,
                 {
                     uint OriginalIndex = GridParticleIndice[NeighborIdx];
                     float3 Vij = Velocity - make_float3(SortedVelocities[NeighborIdx]);
-                    OutPressureForce += gParameters.ParticleMass * ((Pressure / (Density * Density)) + (Pressures[OriginalIndex] / (Densities[OriginalIndex] * Densities[OriginalIndex]))) * CudaKernelSpikyGradient(Rij);
-                    OutViscosityForce += (gParameters.ParticleMass / Densities[OriginalIndex]) * (dot(Vij, Rij) / (R2 + 0.01f * gParameters.SupportRadiusSquared)) * CudaKernelPoly6Gradient(Rij);
+                    if (OriginalIndex < NumFluidParticles)
+                    {
+                        OutPressureForce += gParameters.ParticleMass
+                            * ((Pressure / (Density * Density)) + (Pressures[OriginalIndex] / (Densities[OriginalIndex] * Densities[OriginalIndex])))
+                            * CudaKernelSpikyGradient(Rij);
+                        OutViscosityForce += (gParameters.ParticleMass / Densities[OriginalIndex]) * (dot(Vij, Rij) / (R2 + 0.01f * gParameters.SupportRadiusSquared)) * CudaKernelPoly6Gradient(Rij);
+                    }
+                    else
+                    {
+                        OutPressureForce += gParameters.BoundaryParticleMass
+                            * ((Pressure / (Density * Density)) + (Pressures[OriginalIndex] / (Densities[OriginalIndex] * Densities[OriginalIndex])))
+                            * CudaKernelSpikyGradient(Rij);
+                        OutViscosityForce += (gParameters.BoundaryParticleMass / Densities[OriginalIndex]) * (dot(Vij, Rij) / (R2 + 0.01f * gParameters.SupportRadiusSquared)) * CudaKernelPoly6Gradient(Rij);
+                    }
+                    // OutPressureForce += gParameters.ParticleMass * ((Pressure / (Density * Density)) + (Pressures[OriginalIndex] / (Densities[OriginalIndex] * Densities[OriginalIndex]))) * CudaKernelSpikyGradient(Rij);
+                    
                 }
             }
         }
@@ -591,12 +608,13 @@ void CudaComputeAllForcesAndVelocitiesDevice(float4* OutVelocities,    // output
                                              float4* OutViscosityForces,
                                              float4* SortedPositions,  // input: sorted positions
                                              float4* SortedVelocities, // input: sorted velocities
-                                             float* Densities,         // input: original densities
-                                             float* Pressures,         // input: original pressures
-                                             uint* GridParticleIndice, // input: sorted particle indices
-                                             uint* CellStarts,
-                                             uint* CellEnds,
-                                             uint  NumParticles)
+                                             float*  Densities,         // input: original densities
+                                             float*  Pressures,         // input: original pressures
+                                             uint*   GridParticleIndice, // input: sorted particle indices
+                                             uint*   CellStarts,
+                                             uint*   CellEnds,
+                                             uint    NumFluidParticles,
+                                             uint    NumParticles)
 {
     uint Index = (blockIdx.x * blockDim.x) + threadIdx.x;
 
@@ -640,17 +658,33 @@ void CudaComputeAllForcesAndVelocitiesDevice(float4* OutVelocities,    // output
                                         Pressures, 
                                         GridParticleIndice, 
                                         CellStarts, 
-                                        CellEnds);
+                                        CellEnds,
+                                        NumFluidParticles);
             }
         }
     }
 
-    PressureForce *= -gParameters.ParticleMass;
-    ViscosityForce *= gParameters.ParticleMass * gParameters.Viscosity * 10.0f;
-    float3 ExternalForce = gParameters.Gravity * gParameters.ParticleMass;
-    OutPressureForces[OriginalIndex] = make_float4(PressureForce, 0.0f);
-    OutViscosityForces[OriginalIndex] = make_float4(ViscosityForce, 0.0f);
-    OutForces[OriginalIndex] = make_float4((PressureForce + ViscosityForce + ExternalForce), 0.0f);
+    if (OriginalIndex < NumFluidParticles)
+    {
+        PressureForce *= -gParameters.ParticleMass;
+        ViscosityForce *= gParameters.ParticleMass * gParameters.Viscosity * 10.0f;
+        float3 ExternalForce = gParameters.Gravity * gParameters.ParticleMass;
+        OutPressureForces[OriginalIndex] = make_float4(PressureForce, 0.0f);
+        OutViscosityForces[OriginalIndex] = make_float4(ViscosityForce, 0.0f);
+        OutForces[OriginalIndex] = make_float4((PressureForce + ViscosityForce + ExternalForce), 0.0f);
+        OutVelocities[OriginalIndex] += gParameters.DeltaTime * (OutForces[OriginalIndex] / gParameters.ParticleMass);
+    }
+    else
+    {
+        PressureForce *= -gParameters.BoundaryParticleMass;
+        ViscosityForce *= gParameters.BoundaryParticleMass * gParameters.Viscosity * 10.0f;
+        float3 ExternalForce = gParameters.Gravity * gParameters.BoundaryParticleMass;
+        OutPressureForces[OriginalIndex] = make_float4(PressureForce, 0.0f);
+        OutViscosityForces[OriginalIndex] = make_float4(ViscosityForce, 0.0f);
+        OutForces[OriginalIndex] = make_float4((PressureForce + ViscosityForce + ExternalForce), 0.0f);
+        OutVelocities[OriginalIndex] += gParameters.DeltaTime * (make_float4(ExternalForce, 0.0f) / gParameters.BoundaryParticleMass);
+    }
+    
     //printf("[%u]: force=(%f, %f, %f)=press=(%f, %f, %f) + visc=(%f, %f, %f) + extern=(%f, %f, %f) / dens=%f\OutNormalVector",
     //    index, newForce[originalIndex].x, newForce[originalIndex].y, newForce[originalIndex].z,
     //    pressureForce.x, pressureForce.y, pressureForce.z,
@@ -658,7 +692,7 @@ void CudaComputeAllForcesAndVelocitiesDevice(float4* OutVelocities,    // output
     //    externalForce.x, externalForce.y, externalForce.z,
     //    density);
     // write new velocity back to original unsorted location
-    OutVelocities[OriginalIndex] += gParameters.DeltaTime * (OutForces[OriginalIndex] / gParameters.ParticleMass);
+    
 }
 
 __global__
@@ -671,6 +705,7 @@ void CudaComputeForcesAndVelocitiesDevice(float4* OutVelocities,    // output: n
                                           uint* GridParticleIndice, // input: sorted particle indices
                                           uint* CellStarts,
                                           uint* CellEnds,
+                                          uint  NumFluidParticles,
                                           uint  NumParticles)
 {
     uint Index = (blockIdx.x * blockDim.x) + threadIdx.x;
@@ -715,7 +750,8 @@ void CudaComputeForcesAndVelocitiesDevice(float4* OutVelocities,    // output: n
                                         Pressures, 
                                         GridParticleIndice, 
                                         CellStarts, 
-                                        CellEnds);
+                                        CellEnds,
+                                        NumFluidParticles);
             }
         }
     }
@@ -1582,6 +1618,7 @@ int main()
     return 0;
 }
 
+
 #pragma region SphExtern
 //particleSystem_cuda.cu
 extern "C"
@@ -1793,6 +1830,7 @@ extern "C"
                                            uint*  GridParticleIndice,    // input: sorted particle indices
                                            uint*  CellStarts,
                                            uint*  CellEnds,
+                                           uint   NumFluidParticles,
                                            uint   NumParticles)
     {
         // thread per particle
@@ -1812,6 +1850,7 @@ extern "C"
                                                                            GridParticleIndice,         // input: sorted particle indices
                                                                            CellStarts,
                                                                            CellEnds,
+                                                                           NumFluidParticles,
                                                                            NumParticles);
 
         // check if kernel invocation generated an error
@@ -1827,6 +1866,7 @@ extern "C"
                                         uint*  GridParticleIndice,    // input: sorted particle indices
                                         uint*  CellStarts,
                                         uint*  CellEnds,
+                                        uint   NumFluidParticles,
                                         uint   NumParticles)
     {
         // thread per particle
@@ -1844,6 +1884,7 @@ extern "C"
                                                                         GridParticleIndice,         // input: sorted particle indices
                                                                         CellStarts,
                                                                         CellEnds,
+                                                                        NumFluidParticles,
                                                                         NumParticles);
 
         // check if kernel invocation generated an error

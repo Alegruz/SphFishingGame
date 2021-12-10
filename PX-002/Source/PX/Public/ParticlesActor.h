@@ -33,9 +33,10 @@
 //#define NUM_PARTICLES (512u)
 //#define NUM_PARTICLES (128u)
 #define NUM_BOUNDARY_PARTICLES (4096u)
+//#define NUM_BOUNDARY_PARTICLES (128u)
 #define NUM_BOUNDARY_PARTICLES_PER_FISH (16u)
 #define GRID_SIZE (64u)
-#define GRID_SIZE_LOG2  (7u)
+#define GRID_SIZE_LOG2  (6u)
 #define RENDER_INSTANCES (0)
 
 UENUM(BlueprintType)
@@ -141,7 +142,7 @@ public:
 		float FluidParticleMass = 0.02f;
 
 	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly)
-		float BoundaryParticleMass = 0.05f;
+		float BoundaryParticleMass = 0.03f;
 
 	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly)
 		float SupportRadius;
