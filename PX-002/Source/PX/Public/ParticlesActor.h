@@ -24,6 +24,7 @@
 #include "ParticlesActor.generated.h"
 
 //#define NUM_PARTICLES (65536u)
+//#define NUM_PARTICLES (40960u)
 //#define NUM_PARTICLES (32768u)
 #define NUM_PARTICLES (16384u)
 //#define NUM_PARTICLES (8192u)
@@ -32,9 +33,9 @@
 //#define NUM_PARTICLES (1024u)
 //#define NUM_PARTICLES (512u)
 //#define NUM_PARTICLES (128u)
-#define NUM_BOUNDARY_PARTICLES (4096u)
-//#define NUM_BOUNDARY_PARTICLES (128u)
-#define NUM_BOUNDARY_PARTICLES_PER_FISH (16u)
+//#define NUM_BOUNDARY_PARTICLES (4096u)
+#define NUM_BOUNDARY_PARTICLES (8u)
+#define NUM_BOUNDARY_PARTICLES_PER_FISH (1u)
 #define GRID_SIZE (64u)
 #define GRID_SIZE_LOG2  (6u)
 #define RENDER_INSTANCES (0)
@@ -84,7 +85,12 @@ public:
 
 	uint32 CalculateGridHash(int3 GridPosition);
 	int3 CalculateGridPosition(float3 Position);
-	void CalculateHash(uint32* GridParticleHashes, uint32* GridParticleIndices, float* Positions);
+	void CalculateHash(uint32* GridParticleHashes, uint32* GridParticleIndicess, float* Positions);
+
+	UFUNCTION(BlueprintCallable)
+		void AddSphere();
+
+	//void AddSphereImplementation(int32 Start, float* Position, float* Velocity, int32 BallRadius, float Spacing);
 
 	UFUNCTION(BlueprintCallable)
 		float CalculatePoly6BySquaredDistance(float SquaredDistance);
@@ -102,13 +108,13 @@ public:
 	UFUNCTION(BlueprintCallable)
 		float CalculateViscosityLaplacianByDistance(float Distance);
 
-	void ComputeDensityAndPressure(float* OutDensities, float* OutPressures, float* SortedPositions, uint32* GridParticleIndices, uint32* CellStart, uint32* CellEnd, uint32 InNumParticles, uint32 InNumCells);
+	void ComputeDensityAndPressure(float* OutDensities, float* OutPressures, float* SortedPositions, uint32* GridParticleIndicess, uint32* CellStart, uint32* CellEnd, uint32 InNumParticles, uint32 InNumCells);
 
-	void ComputeVelocities(float* OutVelocities, float* SortedPositions, float* SortedVelocities, float* Densities, float* Pressures, float DeltaTime, uint32* GridParticleIndices, uint32* CellStart, uint32* CellEnd, uint32 InNumParticles, uint32 NumCells);
+	void ComputeVelocities(float* OutVelocities, float* SortedPositions, float* SortedVelocities, float* Densities, float* Pressures, float DeltaTime, uint32* GridParticleIndicess, uint32* CellStart, uint32* CellEnd, uint32 InNumParticles, uint32 NumCells);
 
 	void Integrate(float* Positions, float* Velocities, float DeltaTime, uint32 InNumParticles);
 
-	void SortParticles(uint32* GridParticleHashes, uint32* GridParticleIndices);
+	void SortParticles(uint32* GridParticleHashes, uint32* GridParticleIndicess);
 
 	UFUNCTION(BlueprintCallable)
 		void Reset();
@@ -142,7 +148,7 @@ public:
 		float FluidParticleMass = 0.02f;
 
 	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly)
-		float BoundaryParticleMass = 0.03f;
+		float BoundaryParticleMass = 0.02f;
 
 	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly)
 		float SupportRadius;
@@ -190,16 +196,23 @@ public:
 		FVector Gravity = FVector(0.0f, 0.0f, -9.80665f);
 
 	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly)
-		float CustomDeltaTime = 0.001f;
+		float CustomDeltaTime = 0.002f;
+
+	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly)
+		int32 MarchingCubesNeighborSearchDepth = 3;
 
 	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly)
 		int32 NumFishes;
 
 	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly)
-		TArray<FVector> FishesCoordinate;
+		TArray<FVector> FishesCoordinates;
+
+	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly)
+		TArray<FVector> FishesVelocities;
 
 	// data
 	uint32 NumParticles = NUM_PARTICLES + NUM_BOUNDARY_PARTICLES;
+	uint32 NumMaxFluidParticles = NUM_PARTICLES;
 	uint32 NumFluidParticles = NUM_PARTICLES;
 	uint32 NumBoundaryParticles = NUM_BOUNDARY_PARTICLES;
 
@@ -207,14 +220,14 @@ public:
 	float* HostPositions = nullptr;
 	float* HostVelocities = nullptr;
 	float* HostForces = nullptr;
-	float* HostPressureForces = nullptr;
-	float* HostViscosityForces = nullptr;
+	//float* HostPressureForces = nullptr;
+	//float* HostViscosityForces = nullptr;
 	//float* HostSurfaceTensionForces = nullptr;
 	float* HostDensities = nullptr;
 	float* HostPressures = nullptr;
 
 	uint32* HostGridParticleHashes = nullptr;
-	uint32* HostGridParticleIndice = nullptr;
+	uint32* HostGridParticleIndices = nullptr;
 	uint32* HostCellStarts = nullptr;
 	uint32* HostCellEnds = nullptr;
 
@@ -222,8 +235,8 @@ public:
 	float* DevicePositions = nullptr;
 	float* DeviceVelocities = nullptr;
 	float* DeviceForces = nullptr;
-	float* DevicePressureForces = nullptr;
-	float* DeviceViscosityForces = nullptr;
+	//float* DevicePressureForces = nullptr;
+	//float* DeviceViscosityForces = nullptr;
 	//float* DeviceSurfaceTensionForces = nullptr;
 	float* DeviceDensities = nullptr;
 	float* DevicePressures = nullptr;
@@ -233,7 +246,7 @@ public:
 
 	// grid data for sorting method
 	uint32* DeviceGridParticleHashes = nullptr;
-	uint32* DeviceGridParticleIndice = nullptr;
+	uint32* DeviceGridParticleIndices = nullptr;
 	uint32* DeviceCellStarts = nullptr;
 	uint32* DeviceCellEnds = nullptr;
 
@@ -258,14 +271,14 @@ public:
 
 	float3 VoxelSize;
 	uint NumVoxels;
-	uint NumMaxVertice;
+	uint NumMaxVertices;
 	uint NumActiveVoxels = 0u;
-	uint NumTotalVertice = 0u;
+	uint NumTotalVertices = 0u;
 
 	float IsoValue;
 	float DeviceIsoValue;
 
-	float4* HostMcVertices = nullptr;
+	float4* HostMcVerticess = nullptr;
 	float4* HostMcNormals = nullptr;
 
 	uint32* HostMcCellStarts = nullptr;
@@ -274,28 +287,28 @@ public:
 	float* DeviceMcSortedPositions = nullptr;
 
 	// grid data for sorting method
-	uint32* DeviceMcGridParticleHashes = nullptr;
-	uint32* DeviceMcGridParticleIndice = nullptr;
-	uint32* DeviceMcCellStarts = nullptr;
-	uint32* DeviceMcCellEnds = nullptr;
+	//uint32* DeviceMcGridParticleHashes = nullptr;
+	//uint32* DeviceMcGridParticleIndices = nullptr;
+	//uint32* DeviceMcCellStarts = nullptr;
+	//uint32* DeviceMcCellEnds = nullptr;
 
 	// device data
 	float4* DeviceMcPositions = nullptr;
 	float4* DeviceMcNormals = nullptr;
 
 	uchar* DeviceVolumes = nullptr;
-	uint32* DeviceVoxelVertices = nullptr;
-	uint32* DeviceVoxelVerticesScan = nullptr;
+	uint32* DeviceVoxelVerticess = nullptr;
+	uint32* DeviceVoxelVerticessScan = nullptr;
 	uint32* DeviceVoxelsOccupied = nullptr;
 	uint32* DeviceVoxelsOccupiedScan = nullptr;
 	uint32* DeviceCompactedVoxelArray = nullptr;
 
 	// tables
-	uint32* DeviceNumVerticesTable = nullptr;
+	uint32* DeviceNumVerticessTable = nullptr;
 	uint32* DeviceEdgeTable = nullptr;
 	uint32* DeviceTriTable = nullptr;
 
-	TArray<FVector> Vertices;
+	TArray<FVector> Verticess;
 	TArray<int32> Triangles;
 	TArray<FVector> Normals;
 	TArray<FVector2D> Uv0;
@@ -313,4 +326,6 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Components")
 		class UMaterialInterface* Material = nullptr;
+
+	bool bIsInitialized = false;
 };

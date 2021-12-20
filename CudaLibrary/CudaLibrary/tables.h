@@ -16,7 +16,7 @@
 
 // edge table maps 8-bit flag representing which cube vertices are inside
 // the isosurface to 12-bit number indicating which edges are intersected
-uint gEdgeTable[256] =
+uint gEdgesTable[256] =
 {
     0x0  , 0x109, 0x203, 0x30a, 0x406, 0x50f, 0x605, 0x70c,
     0x80c, 0x905, 0xa0f, 0xb06, 0xc0a, 0xd03, 0xe09, 0xf00,
@@ -55,7 +55,7 @@ uint gEdgeTable[256] =
 // triangle table maps same cube vertex index to a list of up to 5 triangles
 // which are built from the interpolated edge vertices
 #define X 255
-uint gTriTable[256][16] =
+uint gTrianglesTable[256][16] =
 {
     {X, X, X, X, X, X, X, X, X, X, X, X, X, X, X, X},
     {0, 8, 3, X, X, X, X, X, X, X, X, X, X, X, X, X},
@@ -317,7 +317,7 @@ uint gTriTable[256][16] =
 #undef X
 
 // number of vertices for each case above
-uint gNumVerticeTable[256] =
+uint gNumVerticesTable[256] =
 {
     0,
     3,

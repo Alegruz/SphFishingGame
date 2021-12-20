@@ -29,12 +29,12 @@ extern "C"
                              uint NumParticles);
 
     void CudaCalculateHashes(uint*  OutGridParticleHashes,
-                             uint*  OutGridParticleIndice,
+                             uint*  OutGridParticleIndices,
                              float* Positions,
                              uint   NumParticles);
 
     void CudaMcCalculateHashes(uint*  OutGridParticleHashes,
-                               uint*  OutGridParticleIndice,
+                               uint*  OutGridParticleIndices,
                                float* Positions,
                                uint   NumParticles);
 
@@ -43,7 +43,7 @@ extern "C"
                                          float* OutSortedPositions,
                                          float* OutSortedVelocities,
                                          uint* GridParticleHashes,
-                                         uint* GridParticleIndice,
+                                         uint* GridParticleIndices,
                                          float* Positions,
                                          float* Velocities,
                                          uint   NumParticles,
@@ -53,7 +53,7 @@ extern "C"
                                            uint* OutCellEnds,
                                            float* OutSortedPositions,
                                            uint* GridParticleHashes,
-                                           uint* GridParticleIndice,
+                                           uint* GridParticleIndices,
                                            float* Positions,
                                            uint   NumParticles,
                                            uint   NumVoxels);
@@ -61,7 +61,7 @@ extern "C"
     void CudaComputeDensitiesAndPressures(float* OutDensities,
                                           float* OutPressures,
                                           float* SortedPositions,
-                                          uint*  GridParticleIndice,
+                                          uint*  GridParticleIndices,
                                           uint*  CellStarts,
                                           uint*  CellEnds,
                                           uint   NumBoundaryParticles,
@@ -76,7 +76,7 @@ extern "C"
                                            float* SortedVelocities,
                                            float* Densities,
                                            float* Pressures,
-                                           uint*  GridParticleIndice,    // input: sorted particle indices
+                                           uint*  GridParticleIndices,    // input: sorted particle indices
                                            uint*  CellStarts,
                                            uint*  CellEnds,
                                            uint   NumFluidParticles,
@@ -88,20 +88,21 @@ extern "C"
                                         float* SortedVelocities,
                                         float* Densities,
                                         float* Pressures,
-                                        uint*  GridParticleIndice,    // input: sorted particle indices
+                                        uint*  GridParticleIndices,    // input: sorted particle indices
                                         uint*  CellStarts,
                                         uint*  CellEnds,
+                                        uint   NumFluidParticles,
                                         uint   NumParticles);
 
-    void CudaSortParticles(uint* DeviceGridParticleHashes, uint* DeviceGridParticleIndice, uint NumParticles);
+    void CudaSortParticles(uint* DeviceGridParticleHashes, uint* DeviceGridParticleIndices, uint NumParticles);
 
     // marching cubes
-    void CudaAllocateTextures(uint** DeviceEdgeTable, uint** DeviceTriTable, uint** DeviceNumVerticeTable);
+    void CudaAllocateTextures(uint** DeviceEdgeTable, uint** DeviceTriTable, uint** DeviceNumVerticesTable);
     void CudaCreateVolumeTexture(uchar* DeviceVolumes, size_t BufferSize);
     void CudaDestroyAllTextureObjects();
     void CudaLaunchClassifyVoxels(dim3 Grid, 
                                   dim3 Threads, 
-                                  uint* OutVoxelVertice, 
+                                  uint* OutVoxelVertices, 
                                   uint* OutOccupiedVoxels, 
                                   uchar* Volumes,
                                   uint3 GridSize, 
@@ -111,31 +112,35 @@ extern "C"
                                   float3 VoxelSize, 
                                   float IsoValue, 
                                   float* SortedPositions, 
+                                  uint* GridParticleIndices, 
                                   uint* CellStarts, 
-                                  uint* CellEnds);
+                                  uint* CellEnds,
+                                  uint NumFluidParticles);
     void CudaLaunchCompactVoxels(dim3 Grid, dim3 Threads, uint* OutCompactedVoxelArray, uint* OccupiedVoxels, uint* OccupiedScanVoxels, uint NumVoxels);
     void CudaLaunchGenerateTriangles(dim3 Grid, 
                                      dim3 Threads,
                                      float4* OutPositions, 
                                      float4* OutNormals, 
                                      uint* CompactedVoxelArray, 
-                                     uint* NumScannedVertice,
+                                     uint* NumScannedVertices,
                                      uint3 GridSize, 
                                      uint3 GridSizeShift, 
                                      uint3 GridSizeMask,
                                      float3 VoxelSize, 
                                      float IsoValue, 
                                      uint NumActiveVoxels, 
-                                     uint NumMaxVertice, 
-                                     float* SortedPositions, 
+                                     uint NumMaxVertices, 
+                                     float* SortedPositions,
+                                     uint* GridParticleIndices,
                                      uint* CellStarts, 
-                                     uint* CellEnds);
+                                     uint* CellEnds,
+                                     uint NumFluidParticles);
     void CudaLaunchGenerateTriangles2(dim3 Grid, 
                                       dim3 Threads,
                                       float4* OutPositions, 
                                       float4* OutNormals, 
                                       uint* CompactedVoxelArray, 
-                                      uint* NumScannedVertice, 
+                                      uint* NumScannedVertices, 
                                       uchar* Volumes,
                                       uint3 GridSize, 
                                       uint3 GridSizeShift, 
@@ -143,10 +148,12 @@ extern "C"
                                       float3 VoxelSize, 
                                       float IsoValue, 
                                       uint NumActiveVoxels, 
-                                      uint NumMaxVertice,
-                                      float4* SortedPositions,
+                                      uint NumMaxVertices,
+                                      float4* SortedPositions, 
+                                      uint* GridParticleIndices,
                                       uint* CellStarts,
-                                      uint* CellEnds);
+                                      uint* CellEnds, 
+                                      uint NumFluidParticles);
     void CudaThrustScanWrapper(unsigned int* Outputs, unsigned int* Inputs, unsigned int NumElements);
 
     void CudaCreateVolumeFromMassAndDensities(dim3 Grid, 
@@ -158,7 +165,7 @@ extern "C"
                                               float3 VoxelSize, 
                                               uint NumFluidParticles,
                                               float4* SortedPositions,
-                                              uint* GridParticleIndice,
+                                              uint* GridParticleIndices,
                                               uint* CellStarts,
                                               uint* CellEnds);
 }

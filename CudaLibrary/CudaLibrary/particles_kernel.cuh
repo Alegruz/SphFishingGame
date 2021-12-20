@@ -59,6 +59,8 @@ struct CudaSimParams
     float XScaleFactor;
     float YScaleFactor;
     float ZScaleFactor;
+
+    int MarchingCubesNeighborSearchDepth;
 };
 
 #endif
