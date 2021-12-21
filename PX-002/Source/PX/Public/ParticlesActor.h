@@ -34,8 +34,8 @@
 //#define NUM_PARTICLES (512u)
 //#define NUM_PARTICLES (128u)
 //#define NUM_BOUNDARY_PARTICLES (4096u)
-#define NUM_BOUNDARY_PARTICLES (8u)
-#define NUM_BOUNDARY_PARTICLES_PER_FISH (1u)
+#define NUM_BOUNDARY_PARTICLES (64u)
+#define NUM_BOUNDARY_PARTICLES_PER_FISH (8u)
 #define GRID_SIZE (64u)
 #define GRID_SIZE_LOG2  (6u)
 #define RENDER_INSTANCES (0)
@@ -214,6 +214,7 @@ public:
 	uint32 NumParticles = NUM_PARTICLES + NUM_BOUNDARY_PARTICLES;
 	uint32 NumMaxFluidParticles = NUM_PARTICLES;
 	uint32 NumFluidParticles = NUM_PARTICLES;
+	uint32 NumRenderingFluidParticles = NUM_PARTICLES / 2u;
 	uint32 NumBoundaryParticles = NUM_BOUNDARY_PARTICLES;
 
 	// CPU data

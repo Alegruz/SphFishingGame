@@ -66,6 +66,7 @@ extern "C"
                                           uint*  CellEnds,
                                           uint   NumBoundaryParticles,
                                           uint   NumFluidParticles,
+                                          uint   NumRenderingFluidParticles,
                                           uint   NumParticles);
 
     void CudaComputeAllForcesAndVelocities(float* OutVelocities,
@@ -80,6 +81,7 @@ extern "C"
                                            uint*  CellStarts,
                                            uint*  CellEnds,
                                            uint   NumFluidParticles,
+                                           uint   NumRenderingFluidParticles,
                                            uint   NumParticles);
 
     void CudaComputeForcesAndVelocities(float* OutVelocities,
@@ -92,6 +94,7 @@ extern "C"
                                         uint*  CellStarts,
                                         uint*  CellEnds,
                                         uint   NumFluidParticles,
+                                        uint   NumRenderingFluidParticles,
                                         uint   NumParticles);
 
     void CudaSortParticles(uint* DeviceGridParticleHashes, uint* DeviceGridParticleIndices, uint NumParticles);
@@ -115,7 +118,8 @@ extern "C"
                                   uint* GridParticleIndices, 
                                   uint* CellStarts, 
                                   uint* CellEnds,
-                                  uint NumFluidParticles);
+                                  uint NumFluidParticles,
+                                  uint NumRenderingFluidParticles);
     void CudaLaunchCompactVoxels(dim3 Grid, dim3 Threads, uint* OutCompactedVoxelArray, uint* OccupiedVoxels, uint* OccupiedScanVoxels, uint NumVoxels);
     void CudaLaunchGenerateTriangles(dim3 Grid, 
                                      dim3 Threads,
@@ -134,7 +138,8 @@ extern "C"
                                      uint* GridParticleIndices,
                                      uint* CellStarts, 
                                      uint* CellEnds,
-                                     uint NumFluidParticles);
+                                     uint NumFluidParticles,
+                                     uint NumRenderingFluidParticles);
     void CudaLaunchGenerateTriangles2(dim3 Grid, 
                                       dim3 Threads,
                                       float4* OutPositions, 
@@ -153,7 +158,8 @@ extern "C"
                                       uint* GridParticleIndices,
                                       uint* CellStarts,
                                       uint* CellEnds, 
-                                      uint NumFluidParticles);
+                                      uint NumFluidParticles,
+                                      uint NumRenderingFluidParticles);
     void CudaThrustScanWrapper(unsigned int* Outputs, unsigned int* Inputs, unsigned int NumElements);
 
     void CudaCreateVolumeFromMassAndDensities(dim3 Grid, 

@@ -468,7 +468,7 @@ void AParticlesActor::InitializeGrid(int32 Size, float Spacing, float Jitter, in
 			{
 				int32 Index = (z * Size * Size) + (y * Size) + x;
 
-				if (Index < InNumFluidParticles / 2)
+				if (Index < static_cast<int32>(NumRenderingFluidParticles) / 2)
 				{
 					switch (SphPlatform)
 					{
@@ -542,7 +542,7 @@ void AParticlesActor::InitializeGrid(int32 Size, float Spacing, float Jitter, in
 			{
 				int32 Index = (z * Size * Size) + (y * Size) + x;
 
-				if (Index < InNumFluidParticles / 2)
+				if (Index < static_cast<int32>(NumRenderingFluidParticles) / 2)
 				{
 					switch (SphPlatform)
 					{
@@ -570,22 +570,22 @@ void AParticlesActor::InitializeGrid(int32 Size, float Spacing, float Jitter, in
 					case ESphPlatform::E_CPU_MULTIPLE_THREADS:
 						break;
 					case ESphPlatform::E_GPU_CUDA:
-						HostPositions[(Index + NumFluidParticles / 2u) * 4] = -((Spacing * x) + SimulationParameters.ParticleRadius - 1.0f + (FMath::FRand() * 2.0f - 1.0f) * Jitter);
-						HostPositions[(Index + NumFluidParticles / 2u) * 4 + 1] = (Spacing * y) + SimulationParameters.ParticleRadius - 1.0f + (FMath::FRand() * 2.0f - 1.0f) * Jitter;
-						HostPositions[(Index + NumFluidParticles / 2u) * 4 + 2] = -((Spacing * z) + SimulationParameters.ParticleRadius - 1.0f + (FMath::FRand() * 2.0f - 1.0f) * Jitter);
-						HostPositions[(Index + NumFluidParticles / 2u) * 4 + 3] = 1.0f;
+						HostPositions[(Index + NumRenderingFluidParticles / 2u) * 4] = -((Spacing * x) + SimulationParameters.ParticleRadius - 1.0f + (FMath::FRand() * 2.0f - 1.0f) * Jitter);
+						HostPositions[(Index + NumRenderingFluidParticles / 2u) * 4 + 1] = (Spacing * y) + SimulationParameters.ParticleRadius - 1.0f + (FMath::FRand() * 2.0f - 1.0f) * Jitter;
+						HostPositions[(Index + NumRenderingFluidParticles / 2u) * 4 + 2] = -((Spacing * z) + SimulationParameters.ParticleRadius - 1.0f + (FMath::FRand() * 2.0f - 1.0f) * Jitter);
+						HostPositions[(Index + NumRenderingFluidParticles / 2u) * 4 + 3] = 1.0f;
 
-						HostVelocities[(Index + NumFluidParticles / 2u) * 4] = 0.0f;
-						HostVelocities[(Index + NumFluidParticles / 2u) * 4 + 1] = 0.0f;
-						HostVelocities[(Index + NumFluidParticles / 2u) * 4 + 2] = 0.0f;
-						HostVelocities[(Index + NumFluidParticles / 2u) * 4 + 3] = 0.0f;
+						HostVelocities[(Index + NumRenderingFluidParticles / 2u) * 4] = 0.0f;
+						HostVelocities[(Index + NumRenderingFluidParticles / 2u) * 4 + 1] = 0.0f;
+						HostVelocities[(Index + NumRenderingFluidParticles / 2u) * 4 + 2] = 0.0f;
+						HostVelocities[(Index + NumRenderingFluidParticles / 2u) * 4 + 3] = 0.0f;
 
 #if RENDER_INSTANCES
 						{
-							FVector Vector(HostPositions[Index * 4] * ParticleRenderRadius / ParticleRadius,
-								HostPositions[Index * 4 + 2] * ParticleRenderRadius / ParticleRadius,
-								(HostPositions[Index * 4 + 1] + 1.0f) * ParticleRenderRadius / ParticleRadius);
-							bool Result = ParticleInstancedMeshComponent->UpdateInstanceTransform(Index,
+							FVector Vector(HostPositions[(Index + NumRenderingFluidParticles / 2u) * 4] * ParticleRenderRadius / ParticleRadius,
+								HostPositions[(Index + NumRenderingFluidParticles / 2u) * 4 + 2] * ParticleRenderRadius / ParticleRadius,
+								(HostPositions[(Index + NumRenderingFluidParticles / 2u) * 4 + 1] + 1.0f) * ParticleRenderRadius / ParticleRadius);
+							bool Result = ParticleInstancedMeshComponent->UpdateInstanceTransform((Index + NumRenderingFluidParticles / 2u),
 								FTransform(FRotator::ZeroRotator, Vector, FVector(ParticleRenderRadius / ParticleMeshRadius)),
 								true);
 							//UE_LOG(LogTemp, Warning, TEXT("%d: InitGrid(%d, %d, %d)::Position=(%f, %f, %f)"),
@@ -608,49 +608,77 @@ void AParticlesActor::InitializeGrid(int32 Size, float Spacing, float Jitter, in
 		}
 	}
 
-	uint32 Thickness = ((NumBoundaryParticles + (static_cast<uint32>((1.0f / ParticleRadius) * (1.0f / (2.0f * ParticleRadius))) - 1u)) / static_cast<uint32>((1.0f / ParticleRadius) * (1.0f / (2.0f * ParticleRadius))));
-
-	for (uint32 y = 0u; y < Thickness; ++y)
+	for (uint32 Index = NumRenderingFluidParticles; Index < NumFluidParticles; ++Index)
 	{
-		for (uint32 z = 0u; z < static_cast<uint32>((1.0f / (2.0f * ParticleRadius))); ++z)
+		HostPositions[Index * 4] = 0.0f;
+		HostPositions[Index * 4 + 1] = 0.0f;
+		HostPositions[Index * 4 + 2] = 0.0f;
+		HostPositions[Index * 4 + 3] = 1.0f;
+
+		HostVelocities[Index * 4] = 0.0f;
+		HostVelocities[Index * 4 + 1] = 0.0f;
+		HostVelocities[Index * 4 + 2] = 0.0f;
+		HostVelocities[Index * 4 + 3] = 0.0f;
+
+#if RENDER_INSTANCES
 		{
-			for (uint32 x = 0u; x < static_cast<uint32>((1.0f / ParticleRadius)); ++x)
-			{
-				uint32 Index = (z * Size * Size) + (y * Size) + x;
-
-				if (Index < NumBoundaryParticles)
-				{
-					HostPositions[(NumMaxFluidParticles + Index) * 4] = (SimulationParameters.ParticleRadius * x) + SimulationParameters.ParticleRadius - 1.0f;
-					HostPositions[(NumMaxFluidParticles + Index) * 4 + 1] = (SimulationParameters.ParticleRadius * z) + SimulationParameters.ParticleRadius - 1.0f;
-					HostPositions[(NumMaxFluidParticles + Index) * 4 + 2] = 0.25f + y * SimulationParameters.ParticleRadius;
-					HostPositions[(NumMaxFluidParticles + Index) * 4 + 3] = 1.0f;
-
-					HostVelocities[(NumMaxFluidParticles + Index) * 4] = 0.0f;
-					HostVelocities[(NumMaxFluidParticles + Index) * 4 + 1] = 0.0f;
-					HostVelocities[(NumMaxFluidParticles + Index) * 4 + 2] = 0.0f;
-					HostVelocities[(NumMaxFluidParticles + Index) * 4 + 3] = 0.0f;
-
-					{
-						FVector Vector(HostPositions[(NumMaxFluidParticles + Index) * 4] * ParticleRenderRadius / ParticleRadius,
-							HostPositions[(NumMaxFluidParticles + Index) * 4 + 2] * ParticleRenderRadius / ParticleRadius,
-							(HostPositions[(NumMaxFluidParticles + Index) * 4 + 1] + 1.0f) * ParticleRenderRadius / ParticleRadius);
-						bool Result = BoundaryParticleInstancedMeshComponent->UpdateInstanceTransform(Index,
-							FTransform(FRotator::ZeroRotator, Vector, FVector(ParticleRenderRadius / ParticleMeshRadius)),
-							true);
-						//UE_LOG(LogTemp, Warning, TEXT("%d: InitGrid(%d, %d, %d)::Position=(%f, %f, %f)"),
-						//	i,
-						//	x, y, z,
-						//	HostPositions[i * 4], HostPositions[i * 4 + 1], HostPositions[i * 4 + 2]);
-						UE_LOG(LogTemp, Warning, TEXT("%d: InitGrid(%d, %d, %d)::Position=(%f, %f, %f), %s"),
-							NumMaxFluidParticles + Index,
-							x, y, z,
-							Vector.X, Vector.Y, Vector.Z,
-							Result ? *FString("True") : *FString("False"));
-					}
-				}
-			}
+			FVector Vector(HostPositions[Index * 4] * ParticleRenderRadius / ParticleRadius,
+				HostPositions[Index * 4 + 2] * ParticleRenderRadius / ParticleRadius,
+				(HostPositions[Index * 4 + 1] + 1.0f) * ParticleRenderRadius / ParticleRadius);
+			bool Result = ParticleInstancedMeshComponent->UpdateInstanceTransform(Index,
+				FTransform(FRotator::ZeroRotator, Vector, FVector(0.0f)),
+				true);
+			//UE_LOG(LogTemp, Warning, TEXT("%d: InitGrid(%d, %d, %d)::Position=(%f, %f, %f)"),
+			//	i,
+			//	x, y, z,
+			//	HostPositions[i * 4], HostPositions[i * 4 + 1], HostPositions[i * 4 + 2]);
 		}
+#endif
 	}
+
+	//uint32 Thickness = ((NumBoundaryParticles + (static_cast<uint32>((1.0f / ParticleRadius) * (1.0f / (2.0f * ParticleRadius))) - 1u)) / static_cast<uint32>((1.0f / ParticleRadius) * (1.0f / (2.0f * ParticleRadius))));
+
+	//for (uint32 y = 0u; y < Thickness; ++y)
+	//{
+	//	for (uint32 z = 0u; z < static_cast<uint32>((1.0f / (2.0f * ParticleRadius))); ++z)
+	//	{
+	//		for (uint32 x = 0u; x < static_cast<uint32>((1.0f / ParticleRadius)); ++x)
+	//		{
+	//			uint32 Index = (z * Size * Size) + (y * Size) + x;
+
+	//			if (Index < NumBoundaryParticles)
+	//			{
+	//				HostPositions[(NumMaxFluidParticles + Index) * 4] = (SimulationParameters.ParticleRadius * x) + SimulationParameters.ParticleRadius - 1.0f;
+	//				HostPositions[(NumMaxFluidParticles + Index) * 4 + 1] = (SimulationParameters.ParticleRadius * z) + SimulationParameters.ParticleRadius - 1.0f;
+	//				HostPositions[(NumMaxFluidParticles + Index) * 4 + 2] = 0.25f + y * SimulationParameters.ParticleRadius;
+	//				HostPositions[(NumMaxFluidParticles + Index) * 4 + 3] = 1.0f;
+
+	//				HostVelocities[(NumMaxFluidParticles + Index) * 4] = 0.0f;
+	//				HostVelocities[(NumMaxFluidParticles + Index) * 4 + 1] = 0.0f;
+	//				HostVelocities[(NumMaxFluidParticles + Index) * 4 + 2] = 0.0f;
+	//				HostVelocities[(NumMaxFluidParticles + Index) * 4 + 3] = 0.0f;
+
+	//				{
+	//					FVector Vector(HostPositions[(NumMaxFluidParticles + Index) * 4] * ParticleRenderRadius / ParticleRadius,
+	//						HostPositions[(NumMaxFluidParticles + Index) * 4 + 2] * ParticleRenderRadius / ParticleRadius,
+	//						(HostPositions[(NumMaxFluidParticles + Index) * 4 + 1] + 1.0f) * ParticleRenderRadius / ParticleRadius);
+	//					bool Result = BoundaryParticleInstancedMeshComponent->UpdateInstanceTransform(Index,
+	//						FTransform(FRotator::ZeroRotator, Vector, FVector(ParticleRenderRadius / ParticleMeshRadius)),
+	//						true);
+	//					//UE_LOG(LogTemp, Warning, TEXT("%d: InitGrid(%d, %d, %d)::Position=(%f, %f, %f)"),
+	//					//	i,
+	//					//	x, y, z,
+	//					//	HostPositions[i * 4], HostPositions[i * 4 + 1], HostPositions[i * 4 + 2]);
+	//					UE_LOG(LogTemp, Warning, TEXT("%d: InitGrid(%d, %d, %d)::Position=(%f, %f, %f), %s"),
+	//						NumMaxFluidParticles + Index,
+	//						x, y, z,
+	//						Vector.X, Vector.Y, Vector.Z,
+	//						Result ? *FString("True") : *FString("False"));
+	//				}
+	//			}
+	//		}
+	//	}
+	//}
 
 #if RENDER_INSTANCES
 	UE_LOG(LogTemp, Warning, TEXT("InitGrid::Num Render Instances: %d, %d"), ParticleInstancedMeshComponent->GetNumRenderInstances(), ParticleInstancedMeshComponent->GetInstanceCount());
@@ -1283,44 +1311,79 @@ void AParticlesActor::Tick(float DeltaTime)
 	//UE_LOG(LogTemp, Warning, TEXT("NumFishes: %d"), NumFishes);
 	for (int32 FishIndex = 0; FishIndex < NumFishes; ++FishIndex)
 	{	
-		HostPositions[Index * 4] = (FishesCoordinates[FishIndex].X) * ParticleRadius / ParticleRenderRadius;
-		HostPositions[Index * 4 + 1] = (FishesCoordinates[FishIndex].Z) * ParticleRadius / ParticleRenderRadius - 1.0f;
-		HostPositions[Index * 4 + 2] = (FishesCoordinates[FishIndex].Y) * ParticleRadius / ParticleRenderRadius;
-		HostPositions[Index * 4 + 3] = 1.0f;
-		HostVelocities[Index * 4] = (FishesVelocities[FishIndex].X) * ParticleRadius / ParticleRenderRadius;
-		HostVelocities[Index * 4 + 1] = (FishesVelocities[FishIndex].Z) * ParticleRadius / ParticleRenderRadius;
-		HostVelocities[Index * 4 + 2] = (FishesVelocities[FishIndex].Y) * ParticleRadius / ParticleRenderRadius;
-		HostVelocities[Index * 4 + 3] = 0.0f;
-		++Index;
-		//for (int32 Z = -1; Z <= 1; ++Z)
-		//{
-		//	for (int32 Y = -1; Y <= 1; ++Y)
-		//	{
-		//		for (int32 X = -1; X <= 1; ++X)
-		//		{
-		//			if (X == 0 || Y == 0 || Z == 0)
-		//			{
-		//				continue;
-		//			}
-		//			if (Index > static_cast<int32>(NumParticles))
-		//			{
-		//				goto break_loop;
-		//			}
-		//			HostPositions[Index * 4] = (FishesCoordinates[FishIndex].X) * ParticleRadius / ParticleRenderRadius + X * (SimulationParameters.ParticleRadius / 2.0f);
-		//			HostPositions[Index * 4 + 1] = (FishesCoordinates[FishIndex].Z) * ParticleRadius / ParticleRenderRadius + Z * (SimulationParameters.ParticleRadius / 2.0f) - 1.0f;
-		//			HostPositions[Index * 4 + 2] = (FishesCoordinates[FishIndex].Y) * ParticleRadius / ParticleRenderRadius + Y * (SimulationParameters.ParticleRadius / 2.0f);
-		//			HostPositions[Index * 4 + 3] = 1.0f;
-		//			HostVelocities[Index * 4] = (FishesVelocities[FishIndex].X) * ParticleRadius / ParticleRenderRadius;
-		//			HostVelocities[Index * 4 + 1] = (FishesVelocities[FishIndex].Z) * ParticleRadius / ParticleRenderRadius;
-		//			HostVelocities[Index * 4 + 2] = (FishesVelocities[FishIndex].Y) * ParticleRadius / ParticleRenderRadius;
-		//			HostVelocities[Index * 4 + 3] = 0.0f;
-		//			++Index;
-		//			//UE_LOG(LogTemp, Warning, TEXT(""))
-		//		}
-		//	}
-		//}
-	//break_loop:;
+		//HostPositions[Index * 4] = (FishesCoordinates[FishIndex].X) * ParticleRadius / ParticleRenderRadius;
+		//HostPositions[Index * 4 + 1] = (FishesCoordinates[FishIndex].Z) * ParticleRadius / ParticleRenderRadius - 1.0f;
+		//HostPositions[Index * 4 + 2] = (FishesCoordinates[FishIndex].Y) * ParticleRadius / ParticleRenderRadius;
+		//HostPositions[Index * 4 + 3] = 1.0f;
+		//HostVelocities[Index * 4] = (FishesVelocities[FishIndex].X) * ParticleRadius / ParticleRenderRadius;
+		//HostVelocities[Index * 4 + 1] = (FishesVelocities[FishIndex].Z) * ParticleRadius / ParticleRenderRadius;
+		//HostVelocities[Index * 4 + 2] = (FishesVelocities[FishIndex].Y) * ParticleRadius / ParticleRenderRadius;
+		//HostVelocities[Index * 4 + 3] = 0.0f;
+		//++Index;
+		for (int32 Z = -1; Z <= 1; ++Z)
+		{
+			for (int32 Y = -1; Y <= 1; ++Y)
+			{
+				for (int32 X = -1; X <= 1; ++X)
+				{
+					if (X == 0 || Y == 0 || Z == 0)
+					{
+						continue;
+					}
+					if (Index > static_cast<int32>(NumParticles))
+					{
+						goto break_loop;
+					}
+					HostPositions[Index * 4] = (FishesCoordinates[FishIndex].X) * ParticleRadius / ParticleRenderRadius + X * (SimulationParameters.ParticleRadius / 2.0f);
+					HostPositions[Index * 4 + 1] = (FishesCoordinates[FishIndex].Z) * ParticleRadius / ParticleRenderRadius + Z * (SimulationParameters.ParticleRadius / 2.0f) - 1.0f;
+					HostPositions[Index * 4 + 2] = (FishesCoordinates[FishIndex].Y) * ParticleRadius / ParticleRenderRadius + Y * (SimulationParameters.ParticleRadius / 2.0f);
+					HostPositions[Index * 4 + 3] = 1.0f;
+					HostVelocities[Index * 4] = (FishesVelocities[FishIndex].X) * ParticleRadius / ParticleRenderRadius;
+					HostVelocities[Index * 4 + 1] = (FishesVelocities[FishIndex].Z) * ParticleRadius / ParticleRenderRadius;
+					HostVelocities[Index * 4 + 2] = (FishesVelocities[FishIndex].Y) * ParticleRadius / ParticleRenderRadius;
+					HostVelocities[Index * 4 + 3] = 0.0f;
+					++Index;
+					//UE_LOG(LogTemp, Warning, TEXT(""))
+				}
+			}
+		}
+	break_loop:;
 	}
+	
+	static int32 Counter = 0;
+	if (Counter % 3 == 0 && NumRenderingFluidParticles <= NumMaxFluidParticles)
+	{
+		//UE_LOG(LogTemp, Warning, TEXT("Counter: %d, NumRenderingFluidParticles: %u"), Counter, NumRenderingFluidParticles);
+		for (int Y = -1; Y <= 1; ++Y)
+		{
+			for (int X = -1; X <= 1; ++X)
+			{
+				if (NumRenderingFluidParticles >= NumMaxFluidParticles)
+				{
+					goto break_additional_fluid_loop;
+				}
+
+				if (X * X + Y * Y > 1)
+				{
+					continue;
+				}
+
+				HostPositions[NumRenderingFluidParticles * 4] = X * 2.0f * ParticleRadius;
+				HostPositions[NumRenderingFluidParticles * 4 + 1] = Y * 2.0f * ParticleRadius;
+				HostPositions[NumRenderingFluidParticles * 4 + 2] = 1.0f;
+				HostPositions[NumRenderingFluidParticles * 4 + 3] = 1.0f;
+				++NumRenderingFluidParticles;
+
+				HostPositions[NumRenderingFluidParticles * 4] = X * 2.0f * ParticleRadius;
+				HostPositions[NumRenderingFluidParticles * 4 + 1] = Y * 2.0f * ParticleRadius;
+				HostPositions[NumRenderingFluidParticles * 4 + 2] = -1.0f;
+				HostPositions[NumRenderingFluidParticles * 4 + 3] = 1.0f;
+				++NumRenderingFluidParticles;
+			}
+		}
+	break_additional_fluid_loop:;
+	}
+	++Counter;
 	cudaMemcpy(CudaPositionsVbo, HostPositions, sizeof(float) * NumParticles * 4, cudaMemcpyHostToDevice);
 	//cudaMemcpy(CudaPositionsVbo + sizeof(float) * 4 * NumMaxFluidParticles,
 	//	HostPositions + sizeof(float) * 4 * NumMaxFluidParticles,
@@ -1397,6 +1460,7 @@ void AParticlesActor::Tick(float DeltaTime)
 										 DeviceCellEnds,
 										 NumBoundaryParticles,
 										 NumFluidParticles,
+										 NumRenderingFluidParticles,
 										 NumParticles);
 
 		//cudaMemcpy(HostDensities, DeviceDensities, sizeof(float) * NumParticles, cudaMemcpyDeviceToHost);
@@ -1434,6 +1498,7 @@ void AParticlesActor::Tick(float DeltaTime)
 									   DeviceCellStarts,
 									   DeviceCellEnds,
 									   NumFluidParticles,
+									   NumRenderingFluidParticles,
 									   NumParticles);
 
 		//cudaMemcpy(HostVelocities, DeviceVelocities, sizeof(float) * 4 * NumParticles, cudaMemcpyDeviceToHost);
@@ -1480,7 +1545,7 @@ void AParticlesActor::Tick(float DeltaTime)
 		//		HostViscosityForces[i * 4], HostViscosityForces[i * 4 + 1], HostViscosityForces[i * 4 + 2]);
 		//}
 	
-		CudaIntegrateSystem(DevicePositions, DeviceVelocities, NumFluidParticles);
+		CudaIntegrateSystem(DevicePositions, DeviceVelocities, NumRenderingFluidParticles);
 
 		//UE_LOG(LogTemp, Warning, TEXT("num particles: %d"), NumParticles);
 		//cudaMemcpy(HostPositions, DevicePositions, sizeof(float) * 4u * NumParticles, cudaMemcpyDeviceToHost);
@@ -1503,10 +1568,9 @@ void AParticlesActor::Tick(float DeltaTime)
 		}
 		cudaMemcpy(HostPositions, DevicePositions, sizeof(float) * 4u * NumFluidParticles, cudaMemcpyDeviceToHost);
 #if RENDER_INSTANCES
-		cudaMemcpy(HostPositions, DevicePositions, sizeof(float) * 4u * NumFluidParticles, cudaMemcpyDeviceToHost);
 
 		//UE_LOG(LogTemp, Warning, TEXT("Tick::NumParticles: %u"), NumParticles);
-		for (uint32 FluidParticleIndex = 0; FluidParticleIndex < NumFluidParticles; ++FluidParticleIndex)
+		for (uint32 FluidParticleIndex = 0; FluidParticleIndex < NumRenderingFluidParticles; ++FluidParticleIndex)
 		{
 			FVector VectorLocation(HostPositions[FluidParticleIndex * 4] * ParticleRenderRadius / ParticleRadius,
 				HostPositions[FluidParticleIndex * 4 + 2] * ParticleRenderRadius / ParticleRadius,
@@ -1592,7 +1656,8 @@ void AParticlesActor::Tick(float DeltaTime)
 							 DeviceGridParticleIndices, 
 							 DeviceCellStarts, 
 							 DeviceCellEnds,
-							 NumFluidParticles);
+							 NumFluidParticles,
+							 NumRenderingFluidParticles);
 
 #if DEBUG_BUFFERS
 	printf("voxelVerts:\n");
@@ -1720,7 +1785,8 @@ void AParticlesActor::Tick(float DeltaTime)
 								DeviceGridParticleIndices, 
 								DeviceCellStarts, 
 								DeviceCellEnds, 
-								NumFluidParticles);
+								NumFluidParticles,
+								NumRenderingFluidParticles);
 #endif
 #endif
 
