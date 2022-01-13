@@ -214,7 +214,7 @@ public:
 	uint32 NumParticles = NUM_PARTICLES + NUM_BOUNDARY_PARTICLES;
 	uint32 NumMaxFluidParticles = NUM_PARTICLES;
 	uint32 NumFluidParticles = NUM_PARTICLES;
-	uint32 NumRenderingFluidParticles = NUM_PARTICLES / 2u;
+	uint32 NumRenderingFluidParticles = NUM_PARTICLES;
 	uint32 NumBoundaryParticles = NUM_BOUNDARY_PARTICLES;
 
 	// CPU data

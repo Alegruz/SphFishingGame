@@ -50,81 +50,87 @@ struct IntegrateFunctor
         // new position = old position + velocity * DeltaTime
         Position += Velocity * gParameters.DeltaTime;
 
+        if (lengthSquared(Position) < (0.25f - gParameters.ParticleRadius) * (0.25f - gParameters.ParticleRadius))
+        {
+            Position = normalize(Position) * (0.25f - gParameters.ParticleRadius);
+            Velocity *= gParameters.BoundaryDamping * normalize(Position);
+        }
+
         // set this to zero to disable collisions with cube sides
-#if 1
-        //if (Position.x > 1.0f * gParameters.XScaleFactor - gParameters.ParticleRadius)
-        //{
-        //    Position.x = 1.0f * gParameters.XScaleFactor - gParameters.ParticleRadius;
-        //    Velocity.x *= gParameters.BoundaryDamping;
-        //}
-
-        if (Position.x > 1.0f - gParameters.ParticleRadius)
-        {
-            Position.x = 1.0f - gParameters.ParticleRadius;
-            Velocity.x *= gParameters.BoundaryDamping;
-        }
-
-        //if (Position.x < -1.0f * gParameters.XScaleFactor + gParameters.ParticleRadius)
-        //{
-        //    Position.x = -1.0f * gParameters.XScaleFactor + gParameters.ParticleRadius;
-        //    Velocity.x *= gParameters.BoundaryDamping;
-        //}
-
-        if (Position.x < -1.0f + gParameters.ParticleRadius)
-        {
-            Position.x = -1.0f + gParameters.ParticleRadius;
-            Velocity.x *= gParameters.BoundaryDamping;
-        }
-
-        //if (Position.y > 1.0f * gParameters.YScaleFactor - gParameters.ParticleRadius)
-        //{
-        //    Position.y = 1.0f * gParameters.YScaleFactor - gParameters.ParticleRadius;
-        //    Velocity.y *= gParameters.BoundaryDamping;
-        //}
-
-        if (Position.y > 1.0f - gParameters.ParticleRadius)
-        {
-            Position.y = 1.0f - gParameters.ParticleRadius;
-            Velocity.y *= gParameters.BoundaryDamping;
-        }
-
-        //if (Position.z > (1.0f * gParameters.ZScaleFactor) - gParameters.ParticleRadius)
-        //{
-        //    Position.z = (1.0f * gParameters.ZScaleFactor) - gParameters.ParticleRadius;
-        //    Velocity.z *= gParameters.BoundaryDamping;
-        //}
-
-        if (Position.z > 1.0f - gParameters.ParticleRadius)
-        {
-            Position.z = 1.0f - gParameters.ParticleRadius;
-            Velocity.z *= gParameters.BoundaryDamping;
-        }
-
-        //if (Position.z < (-1.0f * gParameters.ZScaleFactor) + gParameters.ParticleRadius)
-        //{
-        //    Position.z = (-1.0f * gParameters.ZScaleFactor) + gParameters.ParticleRadius;
-        //    Velocity.z *= gParameters.BoundaryDamping;
-        //}
-
-        if (Position.z < -1.0f + gParameters.ParticleRadius)
-        {
-            Position.z = -1.0f + gParameters.ParticleRadius;
-            Velocity.z *= gParameters.BoundaryDamping;
-        }
-
-#endif
-
-        //if (Position.y < -1.0f * gParameters.YScaleFactor + gParameters.ParticleRadius)
-        //{
-        //    Position.y = -1.0f * gParameters.YScaleFactor + gParameters.ParticleRadius;
-        //    Velocity.y *= gParameters.BoundaryDamping;
-        //}
-
-        if (Position.y < -1.0f + gParameters.ParticleRadius)
-        {
-            Position.y = -1.0f + gParameters.ParticleRadius;
-            Velocity.y *= gParameters.BoundaryDamping;
-        }
+//#if 1
+//        //if (Position.x > 1.0f * gParameters.XScaleFactor - gParameters.ParticleRadius)
+//        //{
+//        //    Position.x = 1.0f * gParameters.XScaleFactor - gParameters.ParticleRadius;
+//        //    Velocity.x *= gParameters.BoundaryDamping;
+//        //}
+//
+//        if (Position.x > 1.0f - gParameters.ParticleRadius)
+//        {
+//            Position.x = 1.0f - gParameters.ParticleRadius;
+//            Velocity.x *= gParameters.BoundaryDamping;
+//        }
+//
+//        //if (Position.x < -1.0f * gParameters.XScaleFactor + gParameters.ParticleRadius)
+//        //{
+//        //    Position.x = -1.0f * gParameters.XScaleFactor + gParameters.ParticleRadius;
+//        //    Velocity.x *= gParameters.BoundaryDamping;
+//        //}
+//
+//        if (Position.x < -1.0f + gParameters.ParticleRadius)
+//        {
+//            Position.x = -1.0f + gParameters.ParticleRadius;
+//            Velocity.x *= gParameters.BoundaryDamping;
+//        }
+//
+//        //if (Position.y > 1.0f * gParameters.YScaleFactor - gParameters.ParticleRadius)
+//        //{
+//        //    Position.y = 1.0f * gParameters.YScaleFactor - gParameters.ParticleRadius;
+//        //    Velocity.y *= gParameters.BoundaryDamping;
+//        //}
+//
+//        if (Position.y > 1.0f - gParameters.ParticleRadius)
+//        {
+//            Position.y = 1.0f - gParameters.ParticleRadius;
+//            Velocity.y *= gParameters.BoundaryDamping;
+//        }
+//
+//        //if (Position.z > (1.0f * gParameters.ZScaleFactor) - gParameters.ParticleRadius)
+//        //{
+//        //    Position.z = (1.0f * gParameters.ZScaleFactor) - gParameters.ParticleRadius;
+//        //    Velocity.z *= gParameters.BoundaryDamping;
+//        //}
+//
+//        if (Position.z > 1.0f - gParameters.ParticleRadius)
+//        {
+//            Position.z = 1.0f - gParameters.ParticleRadius;
+//            Velocity.z *= gParameters.BoundaryDamping;
+//        }
+//
+//        //if (Position.z < (-1.0f * gParameters.ZScaleFactor) + gParameters.ParticleRadius)
+//        //{
+//        //    Position.z = (-1.0f * gParameters.ZScaleFactor) + gParameters.ParticleRadius;
+//        //    Velocity.z *= gParameters.BoundaryDamping;
+//        //}
+//
+//        if (Position.z < -1.0f + gParameters.ParticleRadius)
+//        {
+//            Position.z = -1.0f + gParameters.ParticleRadius;
+//            Velocity.z *= gParameters.BoundaryDamping;
+//        }
+//
+//#endif
+//
+//        //if (Position.y < -1.0f * gParameters.YScaleFactor + gParameters.ParticleRadius)
+//        //{
+//        //    Position.y = -1.0f * gParameters.YScaleFactor + gParameters.ParticleRadius;
+//        //    Velocity.y *= gParameters.BoundaryDamping;
+//        //}
+//
+//        if (Position.y < -1.0f + gParameters.ParticleRadius)
+//        {
+//            Position.y = -1.0f + gParameters.ParticleRadius;
+//            Velocity.y *= gParameters.BoundaryDamping;
+//        }
 
         // store new position and velocity
         thrust::get<0>(InTuple) = make_float4(Position, PositionData.w);
@@ -797,18 +803,19 @@ void CudaComputeForcesAndVelocitiesDevice(float4* OutVelocities,    // output: n
     {
         PressureForce *= -gParameters.ParticleMass;
         ViscosityForce *= gParameters.ParticleMass * gParameters.Viscosity * 10.0f;
-        float3 ExternalForce = gParameters.Gravity * gParameters.ParticleMass;
+        float3 DirectionToCenter = normalize(Position) * gParameters.Gravity.y;
+        float3 ExternalForce = DirectionToCenter * gParameters.ParticleMass;
         OutForces[OriginalIndex] = make_float4((PressureForce + ViscosityForce + ExternalForce), 0.0f);
         OutVelocities[OriginalIndex] += gParameters.DeltaTime * (OutForces[OriginalIndex] / gParameters.ParticleMass);
     }
-    else
-    {
-        PressureForce *= -gParameters.BoundaryParticleMass;
-        ViscosityForce *= gParameters.BoundaryParticleMass * gParameters.Viscosity * 10.0f;
-        float3 ExternalForce = gParameters.Gravity * gParameters.BoundaryParticleMass;
-        OutForces[OriginalIndex] = make_float4((PressureForce + ViscosityForce + ExternalForce), 0.0f);
-        OutVelocities[OriginalIndex] += gParameters.DeltaTime * (make_float4(ExternalForce, 0.0f) / gParameters.BoundaryParticleMass);
-    }
+    //else
+    //{
+    //    PressureForce *= -gParameters.BoundaryParticleMass;
+    //    ViscosityForce *= gParameters.BoundaryParticleMass * gParameters.Viscosity * 10.0f;
+    //    float3 ExternalForce = gParameters.Gravity * gParameters.BoundaryParticleMass;
+    //    OutForces[OriginalIndex] = make_float4((PressureForce + ViscosityForce + ExternalForce), 0.0f);
+    //    OutVelocities[OriginalIndex] += gParameters.DeltaTime * (make_float4(ExternalForce, 0.0f) / gParameters.BoundaryParticleMass);
+    //}
 }
 #pragma endregion
 #pragma endregion
